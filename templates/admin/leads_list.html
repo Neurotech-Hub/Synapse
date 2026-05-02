@@ -1,0 +1,40 @@
+{% extends "admin/base.html" %}
+{% block title %}Leads{% endblock %}
+{% block body %}
+<h1>Lead candidates</h1>
+<p><a href="{{ url_for('admin.leads_export_csv', status=status_filter) }}" class="primary-btn-inline">Export CSV</a></p>
+<form method="get" class="filter-row">
+  <label>Status
+    <select name="status" onchange="this.form.submit()">
+      <option value="">(all)</option>
+      {% for st in ('new','starred','done','archived') %}
+        <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<table class="tbl">
+  <thead>
+    <tr><th>ID</th><th>Created</th><th>Status</th><th>Headline</th><th>Model</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for lead in rows %}
+    <tr>
+      <td>{{ lead.id }}</td>
+      <td>{{ lead.created_at.strftime('%Y-%m-%d') }}</td>
+      <td>{{ lead.status }}</td>
+      <td>{{ lead.headline[:120] }}{% if lead.headline|length > 120 %}…{% endif %}</td>
+      <td>{{ lead.model_used or '—' }}</td>
+      <td class="tbl-actions">
+        <a href="{{ url_for('admin.leads_edit', lid=lead.id) }}">Edit</a>
+        <form method="post" action="{{ url_for('admin.leads_delete', lid=lead.id) }}" onsubmit="return confirm('Delete lead {{ lead.id }}?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="linkish-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

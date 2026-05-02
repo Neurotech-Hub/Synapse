@@ -1,0 +1,24 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block body %}
+<h1>Dashboard</h1>
+
+<form method="post" action="{{ url_for('admin.poll_now') }}" class="toolbar">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+  <button type="submit" class="primary-btn">Poll now</button>
+  <span class="muted">Runs RSS + HTML snapshot harvest for enabled, non-pending sources.</span>
+</form>
+
+<h2>Recent poll logs</h2>
+<ul class="log-list">
+{% for log in logs %}
+  <li class="log-entry {% if not log.ok %}log-bad{% endif %}">
+    <time>{{ log.ran_at.strftime("%Y-%m-%d %H:%M UTC") }}</time>
+    {% if log.ok %}<span class="badge ok">ok</span>{% else %}<span class="badge bad">errors</span>{% endif %}
+    <pre>{{ log.detail }}</pre>
+  </li>
+{% else %}
+  <li class="muted">No polls yet.</li>
+{% endfor %}
+</ul>
+{% endblock %}

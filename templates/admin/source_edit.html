@@ -1,0 +1,15 @@
+{% extends "admin/base.html" %}
+{% block title %}{% if source %}Edit source{% else %}New source{% endif %}{% endblock %}
+{% block body %}
+<h1>{% if source %}Edit{% else %}New{% endif %} source</h1>
+<form method="post">
+  {{ form.hidden_tag() }}
+  <label>{{ form.url.label }} {{ form.url(size=72) }}</label>
+  <label>{{ form.kind.label }} {{ form.kind() }}</label>
+  <label>{{ form.label.label }} {{ form.label(size=72) }}</label>
+  <label class="chk">{{ form.enabled() }} {{ form.enabled.label }}</label>
+  <label class="chk">{{ form.pending() }} {{ form.pending.label }}</label>
+  {{ form.submit(class_='primary-btn') }}
+</form>
+<p><a href="{{ url_for('admin.sources_list') }}">&larr; Sources</a></p>
+{% endblock %}

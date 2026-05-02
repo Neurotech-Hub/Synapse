@@ -1,0 +1,16 @@
+{% extends "admin/base.html" %}
+{% block title %}Edit lead{% endblock %}
+{% block body %}
+<h1>Edit lead {{ lead.id }}</h1>
+<p class="muted">Content item {{ lead.content_item_id }} · <a href="{{ url_for('admin.items_edit', iid=lead.content_item_id) }}">edit item</a></p>
+<form method="post">
+  {{ form.hidden_tag() }}
+  <label>{{ form.headline.label }} {{ form.headline(rows=3, cols=80) }}</label>
+  <label>{{ form.angle.label }} {{ form.angle(rows=5, cols=80) }}</label>
+  <label>{{ form.outreach_snippet.label }} {{ form.outreach_snippet(rows=5, cols=80) }}</label>
+  <label>{{ form.hub_tags.label }} {{ form.hub_tags(size=80) }}</label>
+  <label>{{ form.status.label }} {{ form.status() }}</label>
+  {{ form.submit(class_='primary-btn') }}
+</form>
+<p><a href="{{ url_for('admin.leads_list') }}">&larr; Leads</a></p>
+{% endblock %}

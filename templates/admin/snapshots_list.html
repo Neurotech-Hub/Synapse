@@ -1,0 +1,21 @@
+{% extends "admin/base.html" %}
+{% block title %}Snapshots{% endblock %}
+{% block body %}
+<h1>Snapshots: {{ source.label or source.url }}</h1>
+<p class="muted">Read-only fingerprints for HTML monitors ({{ source.url }}).</p>
+<table class="tbl">
+  <thead><tr><th>ID</th><th>Fetched (UTC)</th><th>SHA-256</th></tr></thead>
+  <tbody>
+  {% for sn in snaps %}
+    <tr>
+      <td>{{ sn.id }}</td>
+      <td>{{ sn.fetched_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      <td class="mono">{{ sn.body_sha256 }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="3" class="muted">No snapshots yet (run Poll after page changes).</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p><a href="{{ url_for('admin.sources_list') }}">&larr; Sources</a></p>
+{% endblock %}

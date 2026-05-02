@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Sign in — Synapse</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}"/>
+</head>
+<body class="admin login-screen">
+  <main class="login-card">
+    <h1>Synapse admin</h1>
+    <form method="post">
+      {{ form.hidden_tag() }}
+      <label>{{ form.password.label }} {{ form.password() }}</label>
+      {{ form.submit(class_='primary-btn') }}
+    </form>
+    <p class="muted"><a href="{{ url_for('public.index') }}">&larr; Public site</a></p>
+  </main>
+</body>
+</html>

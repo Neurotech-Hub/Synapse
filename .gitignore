@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+*.so
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
+
+# Virtual env
+.venv/
+venv/
+ENV/
+
+# Environment & secrets (keep .env.example in repo if you add one)
+.env
+.env.*
+!.env.example
+
+# Flask / local data
+instance/
+*.db
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Type checkers / linters (optional)
+.mypy_cache/
+.ruff_cache/
+
+# Editors & OS
+.DS_Store
+*.swp
+*.swo
+.idea/
+
+# Logs
+*.log

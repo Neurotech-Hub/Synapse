@@ -1,0 +1,31 @@
+{% extends "admin/base.html" %}
+{% block title %}Sources{% endblock %}
+{% block body %}
+<h1>Sources</h1>
+<p><a href="{{ url_for('admin.sources_new') }}" class="primary-btn-inline">New source</a></p>
+<table class="tbl">
+  <thead>
+    <tr><th>ID</th><th>Kind</th><th>Enabled</th><th>Pending</th><th>Label</th><th>URL</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for s in rows %}
+    <tr>
+      <td>{{ s.id }}</td>
+      <td>{{ s.kind }}</td>
+      <td>{{ 'yes' if s.enabled else 'no' }}</td>
+      <td>{{ 'yes' if s.pending else 'no' }}</td>
+      <td>{{ s.label or '—' }}</td>
+      <td class="cell-url"><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.url }}</a></td>
+      <td class="tbl-actions">
+        <a href="{{ url_for('admin.sources_edit', sid=s.id) }}">Edit</a>
+        <a href="{{ url_for('admin.sources_snapshots', sid=s.id) }}">Snapshots</a>
+        <form method="post" action="{{ url_for('admin.sources_delete', sid=s.id) }}" onsubmit="return confirm('Delete source {{ s.id }}?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="linkish-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

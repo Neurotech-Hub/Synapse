@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Synapse — Community signal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='public.css') }}"/>
+</head>
+<body class="public">
+  <header class="hero">
+    <p class="eyebrow">Neurotech Hub</p>
+    <h1>Synapse</h1>
+    <p class="lede">
+      We quietly watch the links that matter—labs, papers, signals—so outreach stays specific.
+      Share a site you care about; we’ll fold it into our ingest loop.
+    </p>
+  </header>
+
+  <main class="dialogue">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <p role="alert" class="flash flash-{{ cat }}">{{ msg }}</p>
+      {% endfor %}
+    {% endwith %}
+    <p class="prompt-line">Add a site to ingest…</p>
+    <form method="post" class="url-form" novalidate>
+      {{ form.hidden_tag() }}
+      <div class="field-row">
+        {{ form.url(class_="url-input", placeholder="https://…", autocomplete="url", autofocus=true) }}
+        {{ form.submit(class_="submit-btn") }}
+      </div>
+      {% for err in form.url.errors %}<p class="form-error">{{ err }}</p>{% endfor %}
+    </form>
+
+    <section class="future-note" aria-hidden="true">
+      <p class="muted">Soon: a short AI readout of what we pulled from each new link—for you behind the curtain first.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <a href="{{ url_for('admin.login') }}" class="foot-link">Team sign-in</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,12 @@
+flask>=3.0
+flask-sqlalchemy>=3.1
+flask-migrate>=4.0
+flask-login>=0.6
+flask-wtf>=1.2
+flask-limiter>=3.8
+werkzeug>=3.0
+feedparser>=6.0
+email-validator>=2.0
+
+# Uncomment or install when using Postgres (matches synapse_scope.md)
+# psycopg[binary]>=3.0
