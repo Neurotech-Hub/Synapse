@@ -12,7 +12,7 @@ from app.web.public_routes import public_bp
 csrf = CSRFProtect()
 
 
-def create_app() -> Flask:
+def create_app(override_config: dict | None = None) -> Flask:
     root = Path(__file__).resolve().parent.parent
     flask_app = Flask(
         __name__,
@@ -20,6 +20,8 @@ def create_app() -> Flask:
         static_folder=str(root / "static"),
     )
     flask_app.config.from_object(get_config())
+    if override_config:
+        flask_app.config.update(override_config)
 
     db.init_app(flask_app)
     migrate.init_app(flask_app, db)

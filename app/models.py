@@ -16,6 +16,8 @@ class Source(db.Model):
     label = db.Column(db.String(512))
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     pending = db.Column(db.Boolean, nullable=False, default=False)
+    #: When ingest is enabled, marks "ours" vs collaborator feeds — see SYNAPSE_LEADS_INGEST.
+    lead_source = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     content_items = db.relationship("ContentItem", back_populates="source", cascade="all,delete-orphan")

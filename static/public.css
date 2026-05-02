@@ -1,159 +1,288 @@
+/* Public landing — Typer.space–inspired: light, roomy, typography-led composer */
+
 :root {
-  --bg: #080a0d;
-  --panel: rgba(255, 255, 255, 0.04);
-  --stroke: rgba(255, 255, 255, 0.12);
-  --text: #e9edf5;
-  --muted: #8b939e;
-  --accent: #5eead4;
-  --accent-dim: #2dd4bf33;
+  --bg-base: #f5f4f2;
+  --bg-tint: #eef1f7;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-solid: #ffffff;
+  --text: #141414;
+  --text-soft: rgba(20, 20, 20, 0.66);
+  --text-faint: rgba(20, 20, 20, 0.45);
+  --stroke: rgba(20, 20, 20, 0.08);
+  --stroke-strong: rgba(20, 20, 20, 0.14);
+  --shadow-soft: 0 24px 80px rgba(26, 32, 44, 0.07), 0 4px 20px rgba(26, 32, 44, 0.04);
+  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --accent: #171717;
+  --accent-hover: #2d2d2d;
+  --success-bg: rgba(34, 197, 94, 0.1);
+  --success-text: #166534;
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --error-text: #b91c1c;
+  --info-bg: rgba(59, 130, 246, 0.08);
+  --info-text: #1e40af;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body.public {
   margin: 0;
   min-height: 100vh;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.55;
   color: var(--text);
-  background: radial-gradient(1200px 600px at 20% -10%, #1a2332 0%, var(--bg) 55%);
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(90% 60% at 50% -5%, rgba(220, 230, 248, 0.55), transparent),
+    radial-gradient(70% 45% at 100% 20%, rgba(245, 240, 255, 0.5), transparent);
+  background-attachment: fixed;
   display: flex;
   flex-direction: column;
+  -webkit-font-smoothing: antialiased;
 }
 
-.hero {
-  padding: 4rem clamp(1.5rem, 5vw, 4rem) 2rem;
-  max-width: 44rem;
+/* ----- Top bar (wordmark strip) ----- */
+.site-head {
+  padding: clamp(1.25rem, 3vw, 1.75rem) clamp(1.25rem, 4vw, 3rem);
 }
 
-.eyebrow {
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-size: 0.75rem;
-  color: var(--accent);
-  margin: 0 0 0.5rem;
+.site-head-inner {
+  max-width: 68rem;
+  margin: 0 auto;
 }
 
-.hero h1 {
-  font-family: Georgia, "Times New Roman", serif;
-  font-weight: 500;
-  font-size: clamp(2.75rem, 6vw, 3.75rem);
-  letter-spacing: -0.03em;
-  margin: 0 0 1rem;
-}
-
-.lede {
-  margin: 0;
-  font-size: 1.1rem;
-  line-height: 1.65;
-  color: var(--muted);
-}
-
-.dialogue {
-  flex: 1;
-  padding: 0 clamp(1.5rem, 5vw, 4rem) 4rem;
-  max-width: 44rem;
-}
-
-.prompt-line {
-  font-size: 1.05rem;
-  margin: 2rem 0 0.75rem;
-}
-
-.url-form {
-  background: var(--panel);
-  border: 1px solid var(--stroke);
-  border-radius: 16px;
-  padding: 1.25rem 1.25rem 1rem;
-}
-
-.field-row {
+.brand-line {
   display: flex;
-  gap: 0.75rem;
   flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.7rem;
+  margin: 0;
+  font-family: var(--font-sans);
+  line-height: 1.2;
 }
 
-.url-input {
-  flex: 1 1 12rem;
-  min-width: 0;
-  font-size: 1rem;
-  padding: 0.85rem 1rem;
-  border-radius: 10px;
-  border: 1px solid var(--stroke);
-  background: rgba(0, 0, 0, 0.35);
+.brand-name {
+  font-weight: 700;
+  font-size: clamp(1.25rem, 3.4vw, 1.55rem);
+  letter-spacing: -0.042em;
   color: var(--text);
 }
 
-.url-input:focus {
-  outline: 2px solid var(--accent-dim);
-  border-color: var(--accent);
+.brand-by-org {
+  font-weight: 400;
+  font-size: clamp(0.8125rem, 2vw, 0.9375rem);
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
 }
 
-.submit-btn {
-  padding: 0.85rem 1.35rem;
-  border-radius: 10px;
-  border: none;
-  font-weight: 600;
-  cursor: pointer;
-  background: var(--accent);
-  color: #042f2e;
+/* ----- Main ----- */
+.main-stack {
+  flex: 1;
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: clamp(2rem, 6vw, 4rem) clamp(1.25rem, 4vw, 2rem);
 }
 
-.submit-btn:hover {
-  filter: brightness(1.05);
+.hero-block {
+  text-align: center;
+  padding-bottom: clamp(2rem, 5vw, 3rem);
 }
 
-.form-error {
-  color: #fca5a5;
-  font-size: 0.9rem;
-  margin: 0.75rem 0 0;
+.hero-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 7vw, 4.15rem);
+  font-weight: 400;
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  margin: 0 0 1.15rem;
+  color: var(--text);
+}
+
+.hero-sub {
+  margin: 0 auto;
+  max-width: 32rem;
+  font-size: 1.0625rem;
+  line-height: 1.62;
+  color: var(--text-soft);
+}
+
+/* Composer card (prompt surface) */
+.composer-panel {
+  margin-top: 0;
+}
+
+.composer-inner {
+  background: var(--surface-solid);
+  background: linear-gradient(
+    155deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(253, 252, 250, 0.98) 100%
+  );
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-xl);
+  padding: clamp(1.65rem, 4vw, 2.35rem);
+  box-shadow: var(--shadow-soft);
+}
+
+.composer-heading {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: clamp(1.125rem, 2.8vw, 1.3125rem);
+  letter-spacing: -0.02em;
+  margin: 0 0 1.25rem;
+  color: var(--text);
 }
 
 .flash {
-  margin: 1rem 0 0;
+  margin: 0 0 1rem;
   padding: 0.85rem 1rem;
-  border-radius: 10px;
+  border-radius: 14px;
   font-size: 0.98rem;
-  border: 1px solid var(--stroke);
+  line-height: 1.45;
 }
 
 .flash-success {
-  background: rgba(94, 234, 212, 0.12);
-  color: var(--accent);
+  background: var(--success-bg);
+  color: var(--success-text);
+  border: 1px solid rgba(34, 197, 94, 0.2);
 }
 
 .flash-error {
-  background: rgba(248, 113, 113, 0.12);
-  color: #fca5a5;
+  background: var(--error-bg);
+  color: var(--error-text);
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 .flash-info {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--muted);
+  background: var(--info-bg);
+  color: var(--info-text);
+  border: 1px solid rgba(59, 130, 246, 0.18);
 }
 
-.future-note {
-  margin-top: 2rem;
+.composer-form {
+  margin: 0;
+}
+
+.composer-row {
+  display: flex;
+  gap: 0.65rem;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.composer-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  border: 1px solid var(--stroke-strong);
+  background: rgba(246, 245, 243, 0.65);
+  color: var(--text);
+  box-shadow: var(--shadow-inner);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.composer-input::placeholder {
+  color: rgba(20, 20, 20, 0.35);
+}
+
+.composer-input:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.composer-input:focus {
+  outline: none;
+  border-color: rgba(20, 20, 20, 0.22);
+  background: var(--surface-solid);
+  box-shadow:
+    0 0 0 4px rgba(20, 20, 20, 0.05),
+    var(--shadow-inner);
+}
+
+.composer-submit {
+  flex: 0 0 auto;
+  font-family: var(--font-sans);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1rem 1.5rem;
+  border-radius: 16px;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.composer-submit:hover {
+  background: var(--accent-hover);
+}
+
+.composer-submit:active {
+  transform: scale(0.98);
+}
+
+.composer-error-wrap {
+  margin: 0.75rem 0 0;
+}
+
+.composer-error {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  color: var(--error-text);
+}
+
+/* Future teaser */
+.future-hint {
+  text-align: center;
+  margin: clamp(2rem, 4vw, 2.75rem) 0 0;
+  font-size: 0.875rem;
+  max-width: 28rem;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .muted {
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.5;
+  color: var(--text-faint);
 }
 
-.foot {
-  padding: 1.5rem clamp(1.5rem, 5vw, 4rem);
+/* Footer */
+.site-foot {
+  padding: clamp(2rem, 4vw, 3rem) clamp(1.25rem, 4vw, 2rem);
+  text-align: center;
   border-top: 1px solid var(--stroke);
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.45), transparent);
 }
 
-.foot-link {
-  color: var(--muted);
-  text-decoration: none;
+.foot-nav {
+  margin-bottom: 0;
+}
+
+.foot-nav-link {
   font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-soft);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
-.foot-link:hover {
-  color: var(--accent);
+.foot-nav-link:hover {
+  color: var(--text);
+  border-bottom-color: rgba(20, 20, 20, 0.2);
 }

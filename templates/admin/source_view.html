@@ -1,0 +1,95 @@
+{% extends "admin/base.html" %}
+{% block title %}Source{% if source.label %}: {{ source.label }}{% else %} {{ source.id }}{% endif %}{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>{% if source.label %}{{ source.label }}{% else %}Source #{{ source.id }}{% endif %}</h1>
+</header>
+<p class="muted contextual-note">ID {{ source.id }} · <span class="cell-url-wrap">{{ source.url }}</span>{% if source.kind == 'rss_feed' %} · RSS ingest{% elif source.kind == 'html_page' %} · HTML snapshot ingest{% endif %}</p>
+
+{% if source.pending %}
+<section class="review-banner" aria-label="Approval">
+  <p class="review-banner-text">This source is waiting for approval and is <strong>not</strong> included in Poll now.</p>
+  <form method="post" action="{{ url_for('admin.sources_approve', sid=source.id) }}" class="review-banner-action">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="primary-btn-inline btn-approve">Approve for polling</button>
+  </form>
+</section>
+{% else %}
+<p class="source-status-line muted">
+  Status:
+  {% if not source.enabled %}
+    <span class="badge badge-muted">Hidden from polling</span>
+  {% else %}
+    <span class="badge badge-active">Approved &middot; included in polls</span>
+  {% endif %}
+</p>
+{% endif %}
+
+<section id="settings" class="source-view-section">
+  <h2 class="source-view-h2">Settings</h2>
+  <form method="post" class="admin-form">
+{% include "admin/includes/source_fields.html" %}
+    <div class="form-submit-row{% if not source.pending %} form-submit-row-split{% endif %}">
+      {{ form.submit(class_='primary-btn') }}
+      {% if not source.pending %}
+      <button type="submit" class="disapprove-btn" formaction="{{ url_for('admin.sources_disapprove', sid=source.id) }}" formmethod="post" formnovalidate onclick="return confirm('Send this source back to review? It will not be polled until approved again.');">Disapprove</button>
+      {% endif %}
+    </div>
+  </form>
+  <p class="admin-help muted">Approval controls whether a source is included in Poll now. Disapprove sends it back to the review queue. Hiding skips polling without deleting the source.</p>
+</section>
+
+<section id="snapshots" class="source-view-section">
+  <h2 class="source-view-h2">Snapshots</h2>
+  <p class="muted source-view-hint"><strong>html_page</strong> poll stores SHA-256 of the raw HTML here (change detection). Each new snapshot becomes a companion <strong>content item</strong> (LLM-condensed when Ollama is enabled).</p>
+  <table class="tbl">
+    <thead><tr><th>ID</th><th>Fetched (UTC)</th><th>SHA-256</th></tr></thead>
+    <tbody>
+    {% for sn in snaps %}
+      <tr>
+        <td>{{ sn.id }}</td>
+        <td>{{ sn.fetched_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td class="mono">{{ sn.body_sha256 }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">No snapshots yet (run Poll after page changes).</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section id="content-items" class="source-view-section">
+  <h2 class="source-view-h2">Content items</h2>
+  <p class="muted source-view-hint"><strong>RSS:</strong> one row per feed entry. <strong>html_page:</strong> one row per new snapshot hash (snippet from visible text ± Ollama).</p>
+  <table class="tbl">
+    <thead><tr><th>ID</th><th>Seen</th><th>Title</th><th class="tbl-actions-col"></th></tr></thead>
+    <tbody>
+    {% for it in content_preview %}
+      <tr>
+        <td>{{ it.id }}</td>
+        <td>{{ it.first_seen_at.strftime('%Y-%m-%d') }}</td>
+        <td>{{ (it.title or '—')[:72] }}</td>
+        <td class="tbl-actions"><a href="{{ url_for('admin.items_edit', iid=it.id) }}">Edit</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="tbl-empty muted">No content items for this source yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if content_total > content_preview|length %}
+  <p class="muted contextual-note"><a href="{{ url_for('admin.items_list', source_id=source.id) }}">All {{ content_total }} items for this source &rarr;</a></p>
+  {% endif %}
+</section>
+
+<section class="source-view-delete-zone">
+  <h2 class="source-view-h2">Danger zone</h2>
+  <form method="post" action="{{ url_for('admin.sources_delete', sid=source.id) }}" class="inline-form delete-zone-inline" onsubmit="return confirm('Delete source {{ source.id }} and all snapshots and content items?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="danger-btn">Delete source</button>
+  </form>
+</section>
+
+<p class="admin-form-foot"><a href="{{ url_for('admin.sources_list') }}" class="back-link">&larr; Back to Sources</a></p>
+
+{% include "admin/includes/source_visit_url_script.html" %}
+{% endblock %}

@@ -1,18 +1,38 @@
 {% extends "admin/base.html" %}
 {% block title %}Edit content item{% endblock %}
 {% block body %}
-<h1>Edit content item {{ item.id }}</h1>
-<p class="muted">Source {{ item.source_id }} · {{ lead_count }} lead(s). Deleting cascades leads when allowed.</p>
-<form method="post">
+<header class="page-head">
+  <h1>Edit content item {{ item.id }}</h1>
+</header>
+<p class="muted contextual-note">
+  {% if item.source %}
+  Source <a href="{{ url_for('admin.sources_view', sid=item.source_id) }}">{{ item.source_id }}</a>
+  {% if item.source.label %} · {{ item.source.label }}{% endif %}
+  · <span class="cell-url-wrap">{{ item.source.url }}</span>
+  {% else %}
+  Source {{ item.source_id }}
+  {% endif %}
+  · {{ lead_count }} lead(s). Deleting cascades leads when allowed.
+</p>
+<form method="post" class="admin-form">
   {{ form.hidden_tag() }}
-  <label>{{ form.title.label }} {{ form.title(rows=3, cols=80) }}</label>
-  <label>{{ form.link.label }} {{ form.link(size=100) }}</label>
-  <label>{{ form.snippet.label }} {{ form.snippet(rows=8, cols=80) }}</label>
-  {{ form.submit(class_='primary-btn') }}
+  <div class="field-group">
+    {{ form.title.label(class_='field-label') }}
+    {{ form.title(class_='field-input field-input-multiline', rows=3, cols=80) }}
+  </div>
+  <div class="field-group">
+    {{ form.link.label(class_='field-label') }}
+    {{ form.link(class_='field-input', size=100) }}
+  </div>
+  <div class="field-group">
+    {{ form.snippet.label(class_='field-label') }}
+    {{ form.snippet(class_='field-input field-input-multiline', rows=8, cols=80) }}
+  </div>
+  <div class="form-submit-row">{{ form.submit(class_='primary-btn') }}</div>
 </form>
-<form method="post" action="{{ url_for('admin.items_delete', iid=item.id) }}" style="margin-top:1rem" onsubmit="return confirm('Really delete item {{ item.id }}? Attached leads block this if any remain.');">
+<form method="post" action="{{ url_for('admin.items_delete', iid=item.id) }}" class="delete-zone" onsubmit="return confirm('Really delete item {{ item.id }}? Attached leads block this if any remain.');">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
   <button type="submit" class="danger-btn">Delete item</button>
 </form>
-<p><a href="{{ url_for('admin.items_list') }}">&larr; Items</a></p>
+<p class="admin-form-foot"><a href="{{ url_for('admin.items_list') }}" class="back-link">&larr; Back to Content items</a></p>
 {% endblock %}

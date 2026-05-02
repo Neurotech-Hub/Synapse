@@ -16,7 +16,7 @@ public_bp = Blueprint("public", __name__)
 
 class SubmitUrlForm(FlaskForm):
     url = StringField("Add a site to ingest", validators=[DataRequired()])
-    submit = SubmitField("Submit")
+    submit = SubmitField("Add")
 
     def validate_url(self, field):
         try:
@@ -46,11 +46,18 @@ def index():
             )
             return render_template("public/index.html", form=form), 200
 
-        src = Source(url=c, kind="html_page", label=None, enabled=True, pending=False)
+        src = Source(
+            url=c,
+            kind="html_page",
+            label=None,
+            enabled=True,
+            pending=True,
+            lead_source=False,
+        )
         db.session.add(src)
         db.session.commit()
         flash(
-            "Thanks — we’ve added that site and will include it in the next ingest run.",
+            "Thanks — we’ve queued that link for review. Our team will approve it before it’s included in automated polling.",
             "success",
         )
         return redirect(url_for("public.index"))

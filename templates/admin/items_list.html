@@ -1,33 +1,53 @@
 {% extends "admin/base.html" %}
+{% set src_url_max = 48 %}
 {% block title %}Content items{% endblock %}
 {% block body %}
-<h1>Content items</h1>
-<form method="get" class="filter-row">
-  <label>Source filter
-    <select name="source_id" onchange="this.form.submit()">
-      <option value="">(all)</option>
-      {% for s in sources %}
-        <option value="{{ s.id }}" {% if source_filter == s.id %}selected{% endif %}>{{ s.label or s.url }}</option>
-      {% endfor %}
-    </select>
-  </label>
-</form>
+<header class="page-head">
+  <h1>Content items</h1>
+</header>
+<div class="list-controls">
+  <form method="get" class="filter-form">
+    <label>Source filter
+      <select name="source_id" onchange="this.form.submit()">
+        <option value="">(all)</option>
+        {% for s in sources %}
+          <option value="{{ s.id }}" {% if source_filter == s.id %}selected{% endif %}>{{ s.label or s.url }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+</div>
 
 <table class="tbl">
   <thead>
-    <tr><th>ID</th><th>Seen</th><th>Title</th><th>External ID</th><th></th></tr>
+    <tr><th>ID</th><th>Source</th><th>Seen</th><th>Title</th><th>External ID</th><th class="tbl-actions-col"></th></tr>
   </thead>
   <tbody>
   {% for it in rows %}
+    {% set src = it.source %}
     <tr>
       <td>{{ it.id }}</td>
+      <td class="cell-source-tie nowrap">
+        <a href="{{ url_for('admin.sources_view', sid=it.source_id) }}" class="mono tiny" title="{{ src.url if src else '' }}">{{ it.source_id }}</a>
+        <span class="source-tie-meta">
+          {% if src %}
+          · {% if src.label %}{{ src.label }}{% else %}<span class="cell-url">{{ src.url[:src_url_max] }}{% if src.url|length > src_url_max %}…{% endif %}</span>{% endif %}
+          {% else %}
+          · <span class="muted">?</span>
+          {% endif %}
+        </span>
+      </td>
       <td>{{ it.first_seen_at.strftime('%Y-%m-%d') }}</td>
       <td>{{ (it.title or '—')[:80] }}</td>
       <td class="mono tiny">{% if it.external_id|length > 52 %}{{ it.external_id[:48] }}…{% else %}{{ it.external_id }}{% endif %}</td>
       <td class="tbl-actions">
-        <a href="{{ url_for('admin.items_edit', iid=it.id) }}">Edit</a>
+        <div class="tbl-actions-inner">
+          <a href="{{ url_for('admin.items_edit', iid=it.id) }}">Edit</a>
+        </div>
       </td>
     </tr>
+  {% else %}
+    <tr><td colspan="6" class="tbl-empty">No content items{% if source_filter %} for this source{% endif %}.</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -3,42 +3,65 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Synapse — Community signal</title>
+  <title>Synapse — Neurotech Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='public.css') }}"/>
 </head>
 <body class="public">
-  <header class="hero">
-    <p class="eyebrow">Neurotech Hub</p>
-    <h1>Synapse</h1>
-    <p class="lede">
-      We quietly watch the links that matter—labs, papers, signals—so outreach stays specific.
-      Share a site you care about; we’ll fold it into our ingest loop.
-    </p>
+  <header class="site-head">
+    <div class="site-head-inner">
+      <p class="brand-line"><span class="brand-name">Synapse</span><span class="brand-by-org">BY THE NEUROTECH HUB</span></p>
+    </div>
   </header>
 
-  <main class="dialogue">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for cat, msg in messages %}
-        <p role="alert" class="flash flash-{{ cat }}">{{ msg }}</p>
-      {% endfor %}
-    {% endwith %}
-    <p class="prompt-line">Add a site to ingest…</p>
-    <form method="post" class="url-form" novalidate>
-      {{ form.hidden_tag() }}
-      <div class="field-row">
-        {{ form.url(class_="url-input", placeholder="https://…", autocomplete="url", autofocus=true) }}
-        {{ form.submit(class_="submit-btn") }}
-      </div>
-      {% for err in form.url.errors %}<p class="form-error">{{ err }}</p>{% endfor %}
-    </form>
-
-    <section class="future-note" aria-hidden="true">
-      <p class="muted">Soon: a short AI readout of what we pulled from each new link—for you behind the curtain first.</p>
+  <main class="main-stack">
+    <section class="hero-block">
+      <h1 class="hero-title">Tell us what to watch.</h1>
+      <p class="hero-sub">Quiet signal from the links that matter—labs, papers, pages.</p>
     </section>
+
+    <section class="composer-panel" aria-labelledby="composer-heading">
+      <div class="composer-inner">
+        <h2 id="composer-heading" class="composer-heading">What’s worth ingesting?</h2>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% for cat, msg in messages %}
+            <p role="status" class="flash flash-{{ cat }}">{{ msg }}</p>
+          {% endfor %}
+        {% endwith %}
+
+        <form method="post" class="composer-form" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="composer-row">
+            {{ form.url(
+              class_="composer-input",
+              placeholder="Paste a lab site, RSS page, anything https…",
+              autocomplete="url",
+              autofocus=true,
+              **({"aria-invalid": "true", "aria-describedby": "composer-errors"} if form.url.errors else {})
+            ) }}
+            {{ form.submit(class_="composer-submit") }}
+          </div>
+          {% if form.url.errors %}
+            <div id="composer-errors" class="composer-error-wrap">
+              {% for err in form.url.errors %}
+                <p class="composer-error">{{ err }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </form>
+      </div>
+    </section>
+
+    <p class="future-hint muted">Soon: per-link readouts—what changed, why it matters—before anything goes public-facing.</p>
   </main>
 
-  <footer class="foot">
-    <a href="{{ url_for('admin.login') }}" class="foot-link">Team sign-in</a>
+  <footer class="site-foot">
+    <nav class="foot-nav" aria-label="Footer">
+      <a href="{{ url_for('admin.login') }}" class="foot-nav-link">Team sign-in</a>
+    </nav>
   </footer>
 </body>
 </html>

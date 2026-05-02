@@ -23,8 +23,14 @@ class SourceForm(FlaskForm):
         validators=[DataRequired()],
     )
     label = StringField("Label", validators=[Optional(), Length(max=512)])
-    enabled = BooleanField("Enabled", default=True)
-    pending = BooleanField("Pending approval (excluded from poll)", default=False)
+    hide_from_polling = BooleanField(
+        "Hide from polling (keep the source, but skip it on Poll now)",
+        default=False,
+    )
+    lead_source = BooleanField(
+        "Lead source (our Hub content worth generating outreach leads from)",
+        default=False,
+    )
     submit = SubmitField("Save")
 
 

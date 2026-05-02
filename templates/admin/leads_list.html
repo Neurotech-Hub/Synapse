@@ -1,22 +1,33 @@
 {% extends "admin/base.html" %}
 {% block title %}Leads{% endblock %}
 {% block body %}
-<h1>Lead candidates</h1>
-<p><a href="{{ url_for('admin.leads_export_csv', status=status_filter) }}" class="primary-btn-inline">Export CSV</a></p>
-<form method="get" class="filter-row">
-  <label>Status
-    <select name="status" onchange="this.form.submit()">
-      <option value="">(all)</option>
-      {% for st in ('new','starred','done','archived') %}
-        <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st }}</option>
-      {% endfor %}
-    </select>
-  </label>
-</form>
+<header class="page-head">
+  <h1>Lead candidates</h1>
+</header>
+
+<section class="feature-paused-note" aria-label="Leads workflow">
+  <p><strong>Nascent / paused.</strong> Synapse does not create new lead candidates from polls right now.</p>
+  <p class="muted">RSS content is still captured as content items on each source. Turning lead generation back on will require enabling <code>SYNAPSE_LEADS_INGEST</code> in the environment <em>and</em> ticking <strong>Lead source</strong> on each source whose content counts as Neurotech Hub&rsquo;s own (for example neurotechhub.wustl.edu). External collaborator feeds stay unflagged.</p>
+</section>
+<div class="list-controls">
+  <form method="get" class="filter-form">
+    <label>Status
+      <select name="status" onchange="this.form.submit()">
+        <option value="">(all)</option>
+        {% for st in ('new','starred','done','archived') %}
+          <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+  <div class="list-controls-actions">
+    <a href="{{ url_for('admin.leads_export_csv', status=status_filter) }}" class="primary-btn-inline">Export CSV</a>
+  </div>
+</div>
 
 <table class="tbl">
   <thead>
-    <tr><th>ID</th><th>Created</th><th>Status</th><th>Headline</th><th>Model</th><th></th></tr>
+    <tr><th>ID</th><th>Created</th><th>Status</th><th>Headline</th><th>Model</th><th class="tbl-actions-col"></th></tr>
   </thead>
   <tbody>
   {% for lead in rows %}
@@ -27,13 +38,17 @@
       <td>{{ lead.headline[:120] }}{% if lead.headline|length > 120 %}…{% endif %}</td>
       <td>{{ lead.model_used or '—' }}</td>
       <td class="tbl-actions">
-        <a href="{{ url_for('admin.leads_edit', lid=lead.id) }}">Edit</a>
-        <form method="post" action="{{ url_for('admin.leads_delete', lid=lead.id) }}" onsubmit="return confirm('Delete lead {{ lead.id }}?');">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <button type="submit" class="linkish-danger">Delete</button>
-        </form>
+        <div class="tbl-actions-inner">
+          <a href="{{ url_for('admin.leads_edit', lid=lead.id) }}">Edit</a>
+          <form method="post" action="{{ url_for('admin.leads_delete', lid=lead.id) }}" class="inline-form" onsubmit="return confirm('Delete lead {{ lead.id }}?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="linkish-danger">Delete</button>
+          </form>
+        </div>
       </td>
     </tr>
+  {% else %}
+    <tr><td colspan="6" class="tbl-empty">No leads match this filter.</td></tr>
   {% endfor %}
   </tbody>
 </table>

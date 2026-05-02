@@ -20,7 +20,7 @@
 | Surface | Path | Role |
 |:---|:---|:---|
 | **Public** | `/` | Synapse intro + “add a site to ingest”; URLs are **canonicalized**; duplicates get a clear flash message. |
-| **Admin** | `/admin/*` | **`ADMIN_PASSWORD`** or **`ADMIN_PASSWORD_HASH`**. CRUD **sources** (incl. `enabled` / **`pending`** — pending sources are skipped by the poller), **leads**, **content items**; read-only **snapshot** list per source; dashboard with **Poll now** and **`poll_log`** history. |
+| **Admin** | `/admin/*` | **`ADMIN_PASSWORD`** / **`ADMIN_PASSWORD_HASH`**. With **Flask `DEBUG` on** and requests from **loopback** only, login is **skipped** (dev shorthand). **`SYNAPSE_DISABLE_LOCAL_ADMIN_BYPASS`** forces password. CRUD sources (incl. `enabled` / **`pending`**), leads, items; snapshots; **Poll now** + **`poll_log`**. Matching marketing typography (compact on login). |
 
 ---
 
@@ -29,7 +29,9 @@
 | Variable | Purpose |
 |:---|:---|
 | `SECRET_KEY` | Flask session signing (set in any shared environment). |
-| `ADMIN_PASSWORD` / `ADMIN_PASSWORD_HASH` | Operator login (prefer hash when not purely local). |
+| `ADMIN_PASSWORD` / `ADMIN_PASSWORD_HASH` | Operator login (plaintext is **stripped** after read; prefer hash when not purely local). |
+| `SYNAPSE_DISABLE_LOCAL_ADMIN_BYPASS` | If `1` / `true`, **never** skip admin password on loopback (useful for exercising real login while debug is on). |
+| `SYNAPSE_TRUST_LOCALHOST` | If `1` / `true`, allow loopback auto-login even when `DEBUG` is **off** (narrow use; default off). |
 | `DATABASE_URL` | SQLAlchemy URI; omitted → SQLite `instance/synapse.db`. |
 | `OLLAMA_HOST` / `OLLAMA_MODEL` | See [docs/ollama.md](docs/ollama.md). |
 

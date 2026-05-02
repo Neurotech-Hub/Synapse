@@ -1,30 +1,60 @@
 {% extends "admin/base.html" %}
+{% set url_list_max = 64 %}
 {% block title %}Sources{% endblock %}
 {% block body %}
-<h1>Sources</h1>
-<p><a href="{{ url_for('admin.sources_new') }}" class="primary-btn-inline">New source</a></p>
+<header class="page-head">
+  <h1>Sources</h1>
+  <a href="{{ url_for('admin.sources_new') }}" class="primary-btn-inline">New source</a>
+</header>
 <table class="tbl">
   <thead>
-    <tr><th>ID</th><th>Kind</th><th>Enabled</th><th>Pending</th><th>Label</th><th>URL</th><th></th></tr>
+    <tr><th>ID</th><th>Kind</th><th>Status</th><th>Lead src</th><th>Label</th><th>URL</th><th>Items</th><th>Snaps</th><th class="tbl-actions-col"></th></tr>
   </thead>
   <tbody>
   {% for s in rows %}
     <tr>
       <td>{{ s.id }}</td>
       <td>{{ s.kind }}</td>
-      <td>{{ 'yes' if s.enabled else 'no' }}</td>
-      <td>{{ 'yes' if s.pending else 'no' }}</td>
+      <td class="nowrap">
+        {% if s.pending %}
+          <span class="badge badge-await">Needs approval</span>
+        {% elif not s.enabled %}
+          <span class="badge badge-muted">Hidden from polling</span>
+        {% else %}
+          <span class="badge badge-active">Active</span>
+        {% endif %}
+      </td>
+      <td class="nowrap">
+        {% if s.lead_source %}
+          <span class="badge badge-active">yes</span>
+        {% else %}
+          <span class="muted">no</span>
+        {% endif %}
+      </td>
       <td>{{ s.label or '—' }}</td>
-      <td class="cell-url"><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.url }}</a></td>
+      <td class="cell-url">
+        <a href="{{ s.url }}" target="_blank" rel="noopener noreferrer" class="tbl-url-link" title="{{ s.url }}">{{ s.url[:url_list_max] }}{% if s.url|length > url_list_max %}…{% endif %}</a>
+      </td>
+      <td class="nowrap tbl-count"><a href="{{ url_for('admin.sources_view', sid=s.id) }}#content-items" title="Content items for this source">{{ content_counts.get(s.id, 0) }}</a></td>
+      <td class="nowrap tbl-count"><a href="{{ url_for('admin.sources_view', sid=s.id) }}#snapshots" title="Snapshots for this source">{{ snapshot_counts.get(s.id, 0) }}</a></td>
       <td class="tbl-actions">
-        <a href="{{ url_for('admin.sources_edit', sid=s.id) }}">Edit</a>
-        <a href="{{ url_for('admin.sources_snapshots', sid=s.id) }}">Snapshots</a>
-        <form method="post" action="{{ url_for('admin.sources_delete', sid=s.id) }}" onsubmit="return confirm('Delete source {{ s.id }}?');">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <button type="submit" class="linkish-danger">Delete</button>
-        </form>
+        <div class="tbl-actions-inner">
+          {% if s.pending %}
+          <form method="post" action="{{ url_for('admin.sources_approve', sid=s.id) }}" class="inline-form tbl-approve-wrap">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="primary-btn-inline btn-approve">Approve</button>
+          </form>
+          {% endif %}
+          <a href="{{ url_for('admin.sources_view', sid=s.id) }}">View</a>
+          <form method="post" action="{{ url_for('admin.sources_delete', sid=s.id) }}" class="inline-form" onsubmit="return confirm('Delete source {{ s.id }}?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="linkish-danger">Delete</button>
+          </form>
+        </div>
       </td>
     </tr>
+  {% else %}
+    <tr><td colspan="9" class="tbl-empty">No sources yet. Use <strong>New source</strong> to add one.</td></tr>
   {% endfor %}
   </tbody>
 </table>

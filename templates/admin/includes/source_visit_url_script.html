@@ -1,0 +1,30 @@
+<script>
+(function () {
+  var input = document.querySelector(".admin-form input[name=\"url\"]");
+  var link = document.getElementById("source-visit-link");
+  if (!input || !link) return;
+  function isHttpUrl(v) {
+    return /^https?:\/\//i.test((v || "").trim());
+  }
+  function sync() {
+    var v = (input.value || "").trim();
+    if (isHttpUrl(v)) {
+      link.setAttribute("href", v);
+      link.removeAttribute("aria-disabled");
+      link.classList.remove("visit-url-helper-link--inactive");
+      link.title = v;
+    } else {
+      link.setAttribute("href", "#");
+      link.setAttribute("aria-disabled", "true");
+      link.classList.add("visit-url-helper-link--inactive");
+      link.removeAttribute("title");
+    }
+  }
+  link.addEventListener("click", function (e) {
+    if (!isHttpUrl(input.value || "")) e.preventDefault();
+  });
+  input.addEventListener("input", sync);
+  input.addEventListener("change", sync);
+  sync();
+})();
+</script>

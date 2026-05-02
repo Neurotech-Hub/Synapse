@@ -3,18 +3,36 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Sign in — Synapse</title>
+  <title>Admin — Synapse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}"/>
 </head>
-<body class="admin login-screen">
-  <main class="login-card">
-    <h1>Synapse admin</h1>
-    <form method="post">
-      {{ form.hidden_tag() }}
-      <label>{{ form.password.label }} {{ form.password() }}</label>
-      {{ form.submit(class_='primary-btn') }}
-    </form>
-    <p class="muted"><a href="{{ url_for('public.index') }}">&larr; Public site</a></p>
+<body class="admin admin-login-page">
+  <main class="auth-shell">
+    <header class="auth-brand">
+      <p class="auth-master-brand">Synapse</p>
+      <p class="auth-tagline compact">Operations</p>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <p class="auth-flash auth-flash-{{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}">{{ msg }}</p>
+      {% endfor %}
+    {% endwith %}
+
+    <section class="auth-card">
+      <h1 class="auth-heading">Sign in</h1>
+      <form method="post" class="auth-form">
+        {{ form.hidden_tag() }}
+        <label class="auth-label" for="{{ form.password.id }}">{{ form.password.label.text }}</label>
+        {{ form.password(class_='auth-input') }}
+        {{ form.submit(class_='auth-submit primary-btn-wide') }}
+      </form>
+    </section>
+
+    <p class="auth-footer-link"><a href="{{ url_for('public.index') }}">← Public site</a></p>
   </main>
 </body>
 </html>

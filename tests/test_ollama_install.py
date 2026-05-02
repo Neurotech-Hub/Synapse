@@ -90,6 +90,33 @@ def test_ollama_instruct_model_pulled(ollama_tags: dict[str, Any]) -> None:
 
 @pytest.mark.ollama
 @pytest.mark.slow
+def test_ollama_try_enrich_lead_simulated_rss_item(ollama_tags: dict[str, Any]) -> None:
+    """End-to-end check: Synapse lead prompt → Ollama → JSON parseable like ingest pipeline."""
+    if not _tags_contain_model(ollama_tags, OLLAMA_MODEL):
+        pytest.skip(
+            f"Model '{OLLAMA_MODEL}' not in ollama tags; run: ollama pull {OLLAMA_MODEL}"
+        )
+    from app.ingest.ollama_client import try_enrich_lead
+
+    result = try_enrich_lead(
+        title="Acme Labs ships open-source widget for edge AI",
+        link="https://example.com/blog/acme-widget-announcement",
+        snippet="The 1.0 release targets researchers; benchmarks show 2x throughput on M-series Macs.",
+    )
+    assert result is not None, (
+        "Lead enrichment returned None (unparseable JSON or network error). "
+        "Ensure the model follows the JSON-only prompt; see app/ingest/ollama_client.py."
+    )
+    assert isinstance(result, dict)
+    # Pipeline uses .get() per field; model should still populate the contract keys.
+    expected_keys = frozenset({"headline", "angle", "outreach_snippet", "hub_tags"})
+    assert expected_keys <= result.keys(), (
+        f"Expected keys {expected_keys}, got {frozenset(result.keys())}"
+    )
+
+
+@pytest.mark.ollama
+@pytest.mark.slow
 def test_ollama_generate_non_stream(ollama_tags: dict[str, Any]) -> None:
     if not _tags_contain_model(ollama_tags, OLLAMA_MODEL):
         pytest.skip(

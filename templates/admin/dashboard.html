@@ -1,13 +1,36 @@
 {% extends "admin/base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block body %}
-<h1>Dashboard</h1>
+<header class="page-head">
+  <h1>Dashboard</h1>
+</header>
 
-<form method="post" action="{{ url_for('admin.poll_now') }}" class="toolbar">
+<form method="post" action="{{ url_for('admin.poll_now') }}" class="toolbar" id="poll-now-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-  <button type="submit" class="primary-btn">Poll now</button>
-  <span class="muted">Runs RSS + HTML snapshot harvest for enabled, non-pending sources.</span>
+  <button type="submit" class="primary-btn" id="poll-now-submit"{% if poll_busy %} disabled aria-disabled="true"{% endif %}>Poll now</button>
+  {% if poll_busy %}
+  <span class="muted">A poll is currently running — refresh to see progress.</span>
+  {% else %}
+  <span class="muted">Polls <strong>approved</strong>, non-hidden sources (RSS + HTML).</span>
+  {% endif %}
 </form>
+
+<div id="poll-run-panel" class="poll-run-panel" hidden aria-busy="true">
+  <p id="poll-run-summary" class="poll-run-summary"></p>
+  <div
+    id="poll-run-track"
+    class="poll-progress-track"
+    role="progressbar"
+    aria-valuemin="0"
+    aria-valuemax="100"
+    aria-valuenow="0"
+    aria-labelledby="poll-run-summary"
+  >
+    <div id="poll-run-fill" class="poll-progress-fill"></div>
+  </div>
+  <p id="poll-run-finished" class="poll-run-finished" hidden></p>
+  <button type="button" class="disapprove-btn poll-run-dismiss" id="poll-run-dismiss" hidden>Done</button>
+</div>
 
 <h2>Recent poll logs</h2>
 <ul class="log-list">
@@ -21,4 +44,113 @@
   <li class="muted">No polls yet.</li>
 {% endfor %}
 </ul>
+
+<script>
+(function () {
+  var pollStatusUrl = "{{ url_for('admin.poll_status') }}";
+  var dashUrl = "{{ url_for('admin.dashboard') }}";
+
+  var params = new URLSearchParams(window.location.search);
+  var runId = params.get("poll_run");
+  if (!runId) return;
+
+  var panel = document.getElementById("poll-run-panel");
+  var summary = document.getElementById("poll-run-summary");
+  var track = document.getElementById("poll-run-track");
+  var fill = document.getElementById("poll-run-fill");
+  var finished = document.getElementById("poll-run-finished");
+  var dismissBtn = document.getElementById("poll-run-dismiss");
+  var submitBtn = document.getElementById("poll-now-submit");
+  if (!panel || !summary || !track || !fill) return;
+
+  panel.hidden = false;
+  if (submitBtn) submitBtn.disabled = true;
+
+  function render(snapshot) {
+    var sources = snapshot.sources || [];
+    var n = sources.length;
+    var completed = sources.filter(function (s) {
+      return s.state === "ok" || s.state === "error";
+    }).length;
+    var pct =
+      n <= 0 ? (snapshot.finished ? 100 : 0) : Math.round((completed / n) * 100);
+    if (snapshot.finished && n > 0) pct = 100;
+
+    summary.textContent = snapshot.finished
+      ? "Finished"
+      : n <= 0
+        ? "Starting…"
+        : completed + " of " + n + " sources";
+
+    track.setAttribute("aria-valuenow", String(pct));
+    fill.style.width = pct + "%";
+    panel.classList.toggle("poll-run-panel--active", !snapshot.finished);
+
+    fill.classList.remove(
+      "poll-progress-fill--ok",
+      "poll-progress-fill--warn",
+      "poll-progress-fill--error"
+    );
+    if (snapshot.finished) {
+      if (snapshot.error) fill.classList.add("poll-progress-fill--error");
+      else if (snapshot.overall_ok === true) fill.classList.add("poll-progress-fill--ok");
+      else if (snapshot.overall_ok === false) fill.classList.add("poll-progress-fill--warn");
+    }
+  }
+
+  var timer;
+
+  function tick() {
+    fetch(pollStatusUrl + "?run_id=" + encodeURIComponent(runId), {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    })
+      .then(function (r) {
+        if (r.status === 404) throw new Error("unknown");
+        if (!r.ok) throw new Error("bad_status");
+        return r.json();
+      })
+      .then(function (snapshot) {
+        render(snapshot);
+        if (snapshot.finished) {
+          panel.removeAttribute("aria-busy");
+          if (snapshot.error) {
+            finished.className = "poll-run-finished poll-run-finished--error";
+            finished.textContent = "Stopped — " + snapshot.error;
+          } else if (snapshot.overall_ok === true) {
+            finished.className = "poll-run-finished poll-run-finished--ok";
+            finished.textContent = "All clear.";
+          } else {
+            finished.className = "poll-run-finished poll-run-finished--warn";
+            finished.textContent =
+              snapshot.overall_ok === false ? "Finished with errors." : "Done.";
+          }
+          finished.hidden = false;
+          if (timer) clearInterval(timer);
+          timer = null;
+          dismissBtn.hidden = false;
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      })
+      .catch(function () {
+        if (timer) clearInterval(timer);
+        timer = null;
+        panel.removeAttribute("aria-busy");
+        summary.textContent = "Couldn't load progress";
+        finished.className = "poll-run-finished poll-run-finished--error";
+        finished.textContent = "Try refreshing.";
+        finished.hidden = false;
+        dismissBtn.hidden = false;
+        if (submitBtn) submitBtn.disabled = false;
+      });
+  }
+
+  dismissBtn.onclick = function () {
+    window.location.href = dashUrl;
+  };
+
+  timer = setInterval(tick, 450);
+  tick();
+})();
+</script>
 {% endblock %}

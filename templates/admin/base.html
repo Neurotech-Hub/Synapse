@@ -4,29 +4,59 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>{% block title %}Admin{% endblock %} — Synapse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}"/>
 </head>
 <body class="admin">
-  <nav class="admin-nav">
-    <strong><a href="{{ url_for('admin.dashboard') }}">Synapse admin</a></strong>
-    <a href="{{ url_for('admin.sources_list') }}">Sources</a>
-    <a href="{{ url_for('admin.leads_list') }}">Leads</a>
-    <a href="{{ url_for('admin.items_list') }}">Content items</a>
-    <a href="{{ url_for('public.index') }}" target="_blank" rel="noopener">Public site</a>
-    {% if current_user.is_authenticated %}
-    <form method="post" action="{{ url_for('admin.logout') }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="linkish">Sign out</button>
-    </form>
-    {% endif %}
-  </nav>
+  {% set ep = request.endpoint %}
+  {% set dashboard_active = ep == 'admin.dashboard' %}
+  {% set sources_active = ep is not none and ep.startswith('admin.sources_') %}
+  {% set leads_active = ep is not none and ep.startswith('admin.leads_') %}
+  {% set items_active = ep is not none and ep.startswith('admin.items_') %}
+  <div class="admin-shell">
+    <aside class="admin-sidebar" aria-label="Admin menu">
+      <div class="admin-sidebar-top">
+        <a href="{{ url_for('admin.dashboard') }}" class="admin-sidebar-brand" aria-label="Synapse — dashboard">Synapse</a>
+        <nav class="admin-sidebar-nav" aria-label="Utilities">
+          <a href="{{ url_for('admin.dashboard') }}" class="admin-sidebar-link{% if dashboard_active %} is-active{% endif %}" {% if dashboard_active %}aria-current="page"{% endif %}>Dashboard</a>
+          <a href="{{ url_for('admin.sources_list') }}" class="admin-sidebar-link{% if sources_active %} is-active{% endif %}" {% if sources_active %}aria-current="page"{% endif %}>Sources</a>
+          <a href="{{ url_for('admin.leads_list') }}" class="admin-sidebar-link{% if leads_active %} is-active{% endif %}" {% if leads_active %}aria-current="page"{% endif %}>Leads</a>
+          <a href="{{ url_for('admin.items_list') }}" class="admin-sidebar-link{% if items_active %} is-active{% endif %}" {% if items_active %}aria-current="page"{% endif %}>Content items</a>
+        </nav>
+      </div>
+      <div class="admin-sidebar-footer">
+        {% if ollama_llm %}
+          {% set _llm_title = (
+            'Ollama at ' ~ ollama_llm.host ~ ' · configured model ' ~ ollama_llm.model
+          ) %}
+          {% if ollama_llm.reachable and ollama_llm.model_ok %}
+          <p class="admin-llm-status admin-llm-status--ok" title="{{ _llm_title }}">LLM: OK<span class="admin-llm-detail"> · {{ ollama_llm.model }}</span></p>
+          {% elif ollama_llm.reachable %}
+          <p class="admin-llm-status admin-llm-status--warn" title="{{ _llm_title }} · Pull: ollama pull {{ ollama_llm.model }}">LLM: no model<span class="admin-llm-detail"> · {{ ollama_llm.model }}</span></p>
+          {% else %}
+          <p class="admin-llm-status admin-llm-status--bad" title="{{ _llm_title }} · Start Ollama or set OLLAMA_HOST">LLM: offline</p>
+          {% endif %}
+        {% endif %}
+        <a href="{{ url_for('public.index') }}" target="_blank" rel="noopener" class="admin-sidebar-muted">Public site</a>
+        {% if current_user.is_authenticated %}
+        <form method="post" action="{{ url_for('admin.logout') }}" class="inline-form admin-sidebar-signout-wrap">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="linkish admin-sidebar-signout">Sign out</button>
+        </form>
+        {% endif %}
+      </div>
+    </aside>
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}
-      <div class="flash flash-{{ cat }}">{{ msg }}</div>
-    {% endfor %}
-  {% endwith %}
-
-  {% block body %}{% endblock %}
+    <div class="admin-main">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="flash flash-{{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block body %}{% endblock %}
+    </div>
+  </div>
 </body>
 </html>
