@@ -1,0 +1,31 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}Snapshots{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Snapshots</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_snapshots_all.html" %}{% endcall %}
+</header>
+<p class="muted contextual-note">Recent HTML fingerprints across all sources (newest first).</p>
+<table class="tbl tbl-compact">
+  <thead>
+    <tr><th>Source</th><th>Snapshot ID</th><th>Fetched (UTC)</th><th>SHA-256</th></tr>
+  </thead>
+  <tbody>
+  {% for sn, source in rows %}
+    {% set sha = sn.body_sha256 %}
+    <tr>
+      <td class="nowrap">
+        <a href="{{ url_for('admin.sources_view', sid=source.id) }}#snapshots">{% if source.label %}{{ source.label }}{% else %}Source #{{ source.id }}{% endif %}</a>
+        <span class="muted tiny mono"> · {{ source.id }}</span>
+      </td>
+      <td>{{ sn.id }}</td>
+      <td class="nowrap">{{ sn.fetched_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      <td class="mono tiny tbl-sha-cell" title="{{ sha }}">{% if sha|length > 12 %}{{ sha[:12] }}…{% else %}{{ sha }}{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="tbl-empty muted">No snapshots yet — add HTML page sources and run <strong>Poll now</strong>.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

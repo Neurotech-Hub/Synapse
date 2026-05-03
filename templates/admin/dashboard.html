@@ -1,19 +1,45 @@
 {% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
 {% block title %}Dashboard{% endblock %}
 {% block body %}
 <header class="page-head">
   <h1>Dashboard</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_dashboard.html" %}{% endcall %}
 </header>
 
 <form method="post" action="{{ url_for('admin.poll_now') }}" class="toolbar" id="poll-now-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
   <button type="submit" class="primary-btn" id="poll-now-submit"{% if poll_busy %} disabled aria-disabled="true"{% endif %}>Poll now</button>
   {% if poll_busy %}
-  <span class="muted">A poll is currently running — refresh to see progress.</span>
-  {% else %}
-  <span class="muted">Polls <strong>approved</strong>, non-hidden sources (RSS + HTML).</span>
+  <span class="toolbar-status muted">Running… refresh for progress.</span>
   {% endif %}
 </form>
+
+<h2 class="dashboard-section-h2">Sources awaiting approval</h2>
+{% if pending_sources %}
+<table class="tbl tbl-dashboard-pending">
+  <thead>
+    <tr><th>Source</th><th>Submitted</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for s in pending_sources %}
+    <tr>
+      <td class="cell-url-wrap"><a href="{{ url_for('admin.sources_view', sid=s.id) }}">{{ s.label or s.url }}</a></td>
+      <td class="muted nowrap">{{ s.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+      <td class="tbl-actions">
+        <form method="post" action="{{ url_for('admin.sources_approve', sid=s.id) }}" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <input type="hidden" name="next" value="{{ url_for('admin.dashboard') }}"/>
+          <button type="submit" class="primary-btn-inline">Approve</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted contextual-note">No URLs from the public submission form are waiting for approval.</p>
+{% endif %}
 
 <div id="poll-run-panel" class="poll-run-panel" hidden aria-busy="true">
   <p id="poll-run-summary" class="poll-run-summary"></p>
@@ -32,18 +58,9 @@
   <button type="button" class="disapprove-btn poll-run-dismiss" id="poll-run-dismiss" hidden>Done</button>
 </div>
 
-<h2>Recent poll logs</h2>
-<ul class="log-list">
-{% for log in logs %}
-  <li class="log-entry {% if not log.ok %}log-bad{% endif %}">
-    <time>{{ log.ran_at.strftime("%Y-%m-%d %H:%M UTC") }}</time>
-    {% if log.ok %}<span class="badge ok">ok</span>{% else %}<span class="badge bad">errors</span>{% endif %}
-    <pre>{{ log.detail }}</pre>
-  </li>
-{% else %}
-  <li class="muted">No polls yet.</li>
-{% endfor %}
-</ul>
+{% set heading_h2 = "Recent poll logs" %}
+{% set log_empty_message = "No polls yet." %}
+{% include "admin/includes/poll_logs_list.html" %}
 
 <script>
 (function () {

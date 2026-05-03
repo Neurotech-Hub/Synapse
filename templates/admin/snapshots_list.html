@@ -1,18 +1,21 @@
 {% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
 {% block title %}Snapshots{% endblock %}
 {% block body %}
 <header class="page-head">
   <h1>Snapshots</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_snapshots_list.html" %}{% endcall %}
 </header>
 <p class="muted contextual-note">{{ source.label or source.url }} · <span class="cell-url-wrap">{{ source.url }}</span></p>
-<table class="tbl">
+<table class="tbl tbl-compact">
   <thead><tr><th>ID</th><th>Fetched (UTC)</th><th>SHA-256</th></tr></thead>
   <tbody>
   {% for sn in snaps %}
+    {% set sha = sn.body_sha256 %}
     <tr>
       <td>{{ sn.id }}</td>
       <td>{{ sn.fetched_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-      <td class="mono">{{ sn.body_sha256 }}</td>
+      <td class="mono tbl-sha-cell" title="{{ sha }}">{% if sha|length > 12 %}{{ sha[:12] }}…{% else %}{{ sha }}{% endif %}</td>
     </tr>
   {% else %}
     <tr><td colspan="3" class="muted">No snapshots yet (run Poll after page changes).</td></tr>

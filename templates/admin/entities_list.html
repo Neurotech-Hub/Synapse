@@ -1,0 +1,29 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}Entities{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Entities</h1>
+  <div class="page-head-actions">
+    <a href="{{ url_for('admin.entities_new') }}" class="primary-btn-inline">New entity</a>
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_entities_list.html" %}{% endcall %}
+  </div>
+</header>
+<table class="tbl">
+  <thead>
+    <tr><th>Slug</th><th>Kind</th><th>Name</th><th class="tbl-actions-col"></th></tr>
+  </thead>
+  <tbody>
+  {% for e in rows %}
+    <tr>
+      <td class="mono">{{ e.slug }}</td>
+      <td>{{ e.kind }}</td>
+      <td>{{ e.display_name }}</td>
+      <td class="tbl-actions"><a href="{{ url_for('admin.entities_edit', eid=e.id) }}">Edit</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="tbl-empty muted">No entities — create one to tag sources.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

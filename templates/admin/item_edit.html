@@ -1,8 +1,10 @@
 {% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
 {% block title %}Edit content item{% endblock %}
 {% block body %}
 <header class="page-head">
   <h1>Edit content item {{ item.id }}</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_item_edit.html" %}{% endcall %}
 </header>
 <p class="muted contextual-note">
   {% if item.source %}
@@ -12,7 +14,7 @@
   {% else %}
   Source {{ item.source_id }}
   {% endif %}
-  · {{ lead_count }} lead(s). Deleting cascades leads when allowed.
+  · {{ lead_count }} lead candidate(s).
 </p>
 <form method="post" class="admin-form">
   {{ form.hidden_tag() }}

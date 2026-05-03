@@ -135,6 +135,16 @@ def try_summarize_html_page(
     return _parse_model_json_object(text)
 
 
+def run_qualification_llm(prompt: str) -> dict[str, Any] | None:
+    """Full Hub-vs-world qualification prompt → JSON dict or ``None`` on failure."""
+
+    try:
+        text = generate_non_stream(prompt)
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+        return None
+    return _parse_model_json_object(text)
+
+
 def try_enrich_lead(title: str, link: str, snippet: str) -> dict[str, Any] | None:
     prompt = (
         "Return ONLY compact JSON without markdown fences. Keys exactly: "

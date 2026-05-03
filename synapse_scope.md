@@ -46,8 +46,8 @@
 | 3 | Python venv + Flask + DB driver (`psycopg` or `asyncpg` + thin sync wrapper — your choice). |
 | 4 | One **ingestion** path: RSS poll → dedupe → insert rows. |
 | 5 | **Ollama** installed + one small instruct model pulled. |
-| 6 | After new items arrive, POST to Ollama → write `lead_candidate` rows. |
-| 7 | **Admin** leads: list / filter / edit / delete + **Export CSV** (`/admin/leads/export.csv`). |
+| 6 | Poll only writes `content_item` rows; **lead qualification** (admin **Leads** page: pipeline settings + **Run lead qualification**) compares Hub vs world slices + entity catalog (`prompts/qualified_lead.txt`) via Ollama and inserts **qualified** `lead_candidate` rows. |
+| 7 | **Admin**: **Entities**, **Tracked entities** per source (`source_entity`), leads list / filter (`status`, `entity_id`) / edit / delete + **Export CSV**. |
 
 RSS is the shortest path on day one; `html_page` can be second (fetch URL, strip boilerplate or hash raw body, compare to last snapshot).
 

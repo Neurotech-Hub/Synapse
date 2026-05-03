@@ -1,11 +1,12 @@
 {% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
 {% block title %}Edit lead{% endblock %}
 {% block body %}
 <header class="page-head">
   <h1>Edit lead {{ lead.id }}</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_lead_edit.html" %}{% endcall %}
 </header>
-<p class="feature-paused-note feature-paused-note--compact muted">Automated ingestion of new leads is paused; this row is legacy or experimental data.</p>
-<p class="muted contextual-note">Content item {{ lead.content_item_id }} · <a href="{{ url_for('admin.items_edit', iid=lead.content_item_id) }}">edit item</a></p>
+<p class="muted contextual-note">Candidate content item {{ lead.candidate_content_item_id }}{% if lead.entity %} · entity <strong>{{ lead.entity.slug }}</strong>{% endif %} · <a href="{{ url_for('admin.items_edit', iid=lead.candidate_content_item_id) }}">edit item</a></p>
 <form method="post" class="admin-form">
   {{ form.hidden_tag() }}
   <div class="field-group">

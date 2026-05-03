@@ -1,0 +1,45 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% import "admin/includes/form_macros.html" as fm %}
+{% block title %}{% if entity %}Edit entity{% else %}New entity{% endif %}{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>{% if entity %}Edit{% else %}New{% endif %} entity</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_entity_edit.html" %}{% endcall %}
+</header>
+
+<form method="post" class="admin-form">
+  {{ form.hidden_tag() }}
+  <div class="field-group field-group-entity-display">
+    {{ form.display_name.label(class_='field-label') }}
+    {{ form.display_name(class_='field-input field-input-prominent', id='entity-display-name', size=72, autocomplete='organization') }}
+    <p id="entity-slug-live" class="entity-slug-live mono muted" aria-live="polite">Slug preview: —</p>
+    <p class="field-hint muted">The slug is generated from this name. On save we pick a URL-safe slug and add <code>_2</code>, <code>_3</code>, … if it collides.</p>
+    {{ fm.field_errors(form.display_name) }}
+  </div>
+  <div class="field-group">
+    {{ form.kind.label(class_='field-label') }}
+    {{ form.kind(class_='field-input') }}
+    {{ fm.field_errors(form.kind) }}
+  </div>
+  <div class="field-group">
+    {{ form.notes.label(class_='field-label') }}
+    {{ form.notes(class_='field-input field-input-multiline', rows=6, cols=72) }}
+    {{ fm.field_errors(form.notes) }}
+  </div>
+  <div class="form-submit-row">
+    {{ form.submit(class_='primary-btn') }}
+  </div>
+</form>
+
+{% if entity %}
+<form method="post" action="{{ url_for('admin.entities_delete', eid=entity.id) }}" class="delete-zone" onsubmit="return confirm('Delete entity {{ entity.slug }}?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+  <button type="submit" class="danger-btn">Delete entity</button>
+</form>
+{% endif %}
+
+<p class="admin-form-foot"><a href="{{ url_for('admin.entities_list') }}" class="back-link">&larr; All entities</a></p>
+
+{% include "admin/includes/entity_display_slug_live.html" %}
+{% endblock %}

@@ -1,9 +1,11 @@
 {% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
 {% set src_url_max = 48 %}
 {% block title %}Content items{% endblock %}
 {% block body %}
 <header class="page-head">
   <h1>Content items</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_items_list.html" %}{% endcall %}
 </header>
 <div class="list-controls">
   <form method="get" class="filter-form">
@@ -18,9 +20,9 @@
   </form>
 </div>
 
-<table class="tbl">
+<table class="tbl tbl-compact">
   <thead>
-    <tr><th>ID</th><th>Source</th><th>Seen</th><th>Title</th><th>External ID</th><th class="tbl-actions-col"></th></tr>
+    <tr><th>ID</th><th>Source</th><th>Seen</th><th>Title</th><th>Ext. ID</th><th class="tbl-actions-col"></th></tr>
   </thead>
   <tbody>
   {% for it in rows %}
@@ -31,7 +33,7 @@
         <a href="{{ url_for('admin.sources_view', sid=it.source_id) }}" class="mono tiny" title="{{ src.url if src else '' }}">{{ it.source_id }}</a>
         <span class="source-tie-meta">
           {% if src %}
-          · {% if src.label %}{{ src.label }}{% else %}<span class="cell-url">{{ src.url[:src_url_max] }}{% if src.url|length > src_url_max %}…{% endif %}</span>{% endif %}
+          · {% if src.label %}{{ src.label }}{% else %}<span class="cell-url tbl-url-truncate" title="{{ src.url }}">{{ src.url[:src_url_max] }}{% if src.url|length > src_url_max %}…{% endif %}</span>{% endif %}
           {% else %}
           · <span class="muted">?</span>
           {% endif %}
@@ -39,7 +41,8 @@
       </td>
       <td>{{ it.first_seen_at.strftime('%Y-%m-%d') }}</td>
       <td>{{ (it.title or '—')[:80] }}</td>
-      <td class="mono tiny">{% if it.external_id|length > 52 %}{{ it.external_id[:48] }}…{% else %}{{ it.external_id }}{% endif %}</td>
+      {% set ext = it.external_id %}
+      <td class="mono tiny tbl-ext-id-cell" title="{{ ext }}">{% if ext|length > 14 %}{{ ext[:12] }}…{% else %}{{ ext }}{% endif %}</td>
       <td class="tbl-actions">
         <div class="tbl-actions-inner">
           <a href="{{ url_for('admin.items_edit', iid=it.id) }}">Edit</a>

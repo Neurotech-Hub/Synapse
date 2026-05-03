@@ -1,18 +1,33 @@
 {% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
 {% set url_list_max = 64 %}
 {% block title %}Sources{% endblock %}
 {% block body %}
 <header class="page-head">
   <h1>Sources</h1>
-  <a href="{{ url_for('admin.sources_new') }}" class="primary-btn-inline">New source</a>
+  <div class="page-head-actions">
+    <a href="{{ url_for('admin.sources_new') }}" class="primary-btn-inline">New source</a>
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_sources_list.html" %}{% endcall %}
+  </div>
 </header>
-<table class="tbl">
+<table class="tbl tbl-compact tbl-sources-grouped">
   <thead>
     <tr><th>ID</th><th>Kind</th><th>Status</th><th>Lead src</th><th>Label</th><th>URL</th><th>Items</th><th>Snaps</th><th class="tbl-actions-col"></th></tr>
   </thead>
-  <tbody>
-  {% for s in rows %}
-    <tr>
+  {% for sec in origin_sections %}
+  <tbody class="tbl-origin-section">
+    <tr class="tbl-origin-section-head">
+      <td colspan="9">
+        <div class="tbl-origin-section-head-inner">
+          <div class="tbl-origin-section-title-row">
+            <span class="tbl-origin-section-title">{{ sec.title }}</span>
+            <span class="tbl-origin-section-badge">{{ sec.count }} {% if sec.count == 1 %}source{% else %}sources{% endif %}</span>
+          </div>
+        </div>
+      </td>
+    </tr>
+    {% for s in sec.sources %}
+    <tr class="tbl-origin-data-row">
       <td>{{ s.id }}</td>
       <td>{{ s.kind }}</td>
       <td class="nowrap">
@@ -53,9 +68,12 @@
         </div>
       </td>
     </tr>
-  {% else %}
-    <tr><td colspan="9" class="tbl-empty">No sources yet. Use <strong>New source</strong> to add one.</td></tr>
-  {% endfor %}
+    {% endfor %}
   </tbody>
+  {% else %}
+  <tbody>
+    <tr><td colspan="9" class="tbl-empty">No sources yet. Use <strong>New source</strong> to add one.</td></tr>
+  </tbody>
+  {% endfor %}
 </table>
 {% endblock %}

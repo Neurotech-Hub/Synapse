@@ -1,0 +1,17 @@
+{% include "admin/includes/help_source_form_tips.html" %}
+<section class="admin-tip-sec">
+  <h3 class="admin-tip-h">Approval &amp; settings</h3>
+  <p class="admin-tip-p">Approval controls whether a source is included in <strong>Poll now</strong>. <strong>Disapprove</strong> sends it back to the review queue. <strong>Hide from polling</strong> skips polling without deleting the source.</p>
+</section>
+<section class="admin-tip-sec">
+  <h3 class="admin-tip-h">Tracked entities</h3>
+  <p class="admin-tip-p">Tags feed into the lead qualification prompt (entity catalog). Tag the same subject on Hub and world feeds when it helps the model resolve duplicates. Create entities under <strong>Entities</strong> if the list is empty.</p>
+</section>
+<section class="admin-tip-sec">
+  <h3 class="admin-tip-h">Snapshots</h3>
+  <p class="admin-tip-p">For <strong>html_page</strong> sources, each poll stores the raw HTML fingerprint here. Each new snapshot gets a companion <strong>content item</strong> (title/snippet from visible text, with Ollama when enabled).</p>
+</section>
+<section class="admin-tip-sec">
+  <h3 class="admin-tip-h">Content items</h3>
+  <p class="admin-tip-p"><strong>RSS:</strong> one row per feed entry. <strong>html_page:</strong> one row per new snapshot hash (snippet may use Ollama).</p>
+</section>

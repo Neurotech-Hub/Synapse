@@ -1,0 +1,28 @@
+{% if heading_h2 is defined and heading_h2 %}
+<h2 class="dashboard-section-h2 dashboard-section-h2--logs">{{ heading_h2 }}</h2>
+{% endif %}
+<ul class="log-list">
+{% for log in logs %}
+  {% set detail_txt = log.detail or '' %}
+  {% set trimmed = detail_txt.strip() %}
+  {% set line1 = trimmed.split('\n')[0] if trimmed else '' %}
+  {% set preview = line1[:160] ~ ('…' if line1|length > 160 else '') %}
+  <li class="log-entry-item">
+    <details class="log-entry {% if not log.ok %}log-bad{% endif %}">
+      <summary class="log-entry-summary">
+        <span class="log-entry-summary-row">
+          <span class="log-entry-caret" aria-hidden="true"></span>
+          <time datetime="{{ log.ran_at.isoformat() }}">{{ log.ran_at.strftime("%Y-%m-%d %H:%M UTC") }}</time>
+          {% if log.ok %}<span class="badge ok">ok</span>{% else %}<span class="badge bad">errors</span>{% endif %}
+        </span>
+        {% if preview %}
+        <span class="log-entry-preview muted">{{ preview }}</span>
+        {% endif %}
+      </summary>
+      <pre class="log-entry-pre">{% if detail_txt %}{{ detail_txt }}{% else %}(empty){% endif %}</pre>
+    </details>
+  </li>
+{% else %}
+  <li class="muted">{{ log_empty_message|default('No log entries yet.') }}</li>
+{% endfor %}
+</ul>

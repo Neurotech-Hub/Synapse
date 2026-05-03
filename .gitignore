@@ -38,6 +38,7 @@ htmlcov/
 .ruff_cache/
 
 # Editors & OS
+.vscode/
 .DS_Store
 *.swp
 *.swo

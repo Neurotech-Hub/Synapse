@@ -1,4 +1,4 @@
-"""Poll enabled sources and enqueue lead rows."""
+"""Poll enabled sources; capture ContentItem snapshots (no synchronous lead qualification)."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ from sqlalchemy import desc
 
 from app.extensions import db
 from app.ingest.html_extract import extract_snapshot_text, plaintext_excerpt
-from app.ingest.ollama_client import OLLAMA_MODEL, try_enrich_lead, try_summarize_html_page
+from app.ingest.ollama_client import try_summarize_html_page
 from app.ingest.rss import fetch_feed, iter_entries
-from app.models import ContentItem, LeadCandidate, PollLog, Source, SourceSnapshot
+from app.models import ContentItem, PollLog, Source, SourceSnapshot
 
 _SSL = ssl.create_default_context()
 
@@ -30,19 +30,6 @@ def _html_page_llm_enabled() -> bool:
         return bool(current_app.config.get("SYNAPSE_HTML_PAGE_LLM", True))
     except RuntimeError:
         return True
-
-
-def _leads_pipeline_enabled(source: Source) -> bool:
-    """RSS-linked LeadCandidate rows + Ollama enrichment only when both are true."""
-
-    if not getattr(source, "lead_source", False):
-        return False
-    try:
-        from flask import current_app
-
-        return bool(current_app.config.get("SYNAPSE_LEADS_INGEST", False))
-    except RuntimeError:
-        return False
 
 
 def _published_dt(pe) -> datetime | None:
@@ -73,38 +60,12 @@ def _ingest_rss_source(source: Source) -> int:
         db.session.add(ci)
         db.session.flush()
         new_items += 1
-        if not _leads_pipeline_enabled(source):
-            continue
-        enriched = try_enrich_lead(pe.title, pe.link, pe.snippet or "")
-        if enriched and isinstance(enriched, dict):
-            headline = (enriched.get("headline") or pe.title).strip() or pe.title
-            angle = enriched.get("angle")
-            out = enriched.get("outreach_snippet")
-            tags = enriched.get("hub_tags")
-            model_used = OLLAMA_MODEL
-        else:
-            headline = (pe.title or "Untitled")[:2000]
-            angle = (pe.snippet or None)[:8000] if pe.snippet else None
-            out = None
-            tags = None
-            model_used = None
-        lead = LeadCandidate(
-            content_item_id=ci.id,
-            headline=headline,
-            angle=str(angle)[:8000] if angle else None,
-            outreach_snippet=str(out)[:8000] if out else None,
-            hub_tags=str(tags)[:2000] if tags else None,
-            model_used=model_used,
-        )
-        db.session.add(lead)
     return new_items
 
 
 def _ingest_html_source(source: Source) -> tuple[int, int]:
-    """Fetch URL, dedupe snapshots, add ``ContentItem`` + optional ``LeadCandidate``.
+    """Fetch URL, dedupe snapshots, add ``ContentItem`` rows on hash change."""
 
-    Returns ``(snapshot_deltas, new_content_items)`` — snapshot delta is ``0`` or ``1``.
-    """
     req = urllib.request.Request(source.url, headers={"User-Agent": "SynapseIngest/1.0"})
     with urllib.request.urlopen(req, timeout=30, context=_SSL) as resp:
         body = resp.read()
@@ -153,36 +114,7 @@ def _ingest_html_source(source: Source) -> tuple[int, int]:
         snippet=ci_snippet or None,
     )
     db.session.add(ci)
-    db.session.flush()
-
-    content_new = 1
-    if not _leads_pipeline_enabled(source):
-        return snapshot_delta, content_new
-
-    enriched = try_enrich_lead(ci_title, source.url or "", ci_snippet or "")
-    if enriched and isinstance(enriched, dict):
-        headline = (enriched.get("headline") or ci_title).strip() or ci_title
-        angle = enriched.get("angle")
-        out = enriched.get("outreach_snippet")
-        tags = enriched.get("hub_tags")
-        model_used = OLLAMA_MODEL
-    else:
-        headline = (ci_title or "Untitled")[:2000]
-        angle = (ci_snippet or None)[:8000] if ci_snippet else None
-        out = None
-        tags = None
-        model_used = None
-    lead = LeadCandidate(
-        content_item_id=ci.id,
-        headline=headline,
-        angle=str(angle)[:8000] if angle else None,
-        outreach_snippet=str(out)[:8000] if out else None,
-        hub_tags=str(tags)[:2000] if tags else None,
-        model_used=model_used,
-    )
-    db.session.add(lead)
-    return snapshot_delta, content_new
-
+    return snapshot_delta, 1
 
 
 PollStepCallback = Callable[..., None]
@@ -191,12 +123,9 @@ PollStepCallback = Callable[..., None]
 def run_poll(*, on_source_step: PollStepCallback | None = None) -> PollLog:
     """Poll all enabled, non-pending sources. Always writes a PollLog row.
 
-    If ``on_source_step`` is set, it is invoked as:
-
-    - ``on_source_step(phase="running", index=i, total=total, source=s)``
-    - ``on_source_step(phase="done", index=i, total=total, source=s, ok=bool, message=str)``
-      after each source (``message`` is the summary line for that source).
+    Lead qualification runs separately (see ``SYNAPSE_LEADS_QUALIFY`` admin action).
     """
+
     lines: list[str] = []
     ok = True
     sources = Source.query.filter_by(enabled=True, pending=False).order_by(Source.id).all()
@@ -210,36 +139,10 @@ def run_poll(*, on_source_step: PollStepCallback | None = None) -> PollLog:
                 if s.kind == "rss_feed":
                     n = _ingest_rss_source(s)
                     line = f"[rss] {s.label or s.url}: {n} new item(s)"
-                    if n > 0:
-                        try:
-                            from flask import current_app
-
-                            ingest = bool(
-                                current_app.config.get("SYNAPSE_LEADS_INGEST", False)
-                            )
-                            if not ingest:
-                                line += " — automated lead generation disabled"
-                            elif not getattr(s, "lead_source", False):
-                                line += " — content only (not a Lead source)"
-                        except RuntimeError:
-                            pass
                     lines.append(line)
                 elif s.kind == "html_page":
                     snaps, contents = _ingest_html_source(s)
                     line = f"[html] {s.label or s.url}: snapshot +{snaps}; content items +{contents}"
-                    if contents > 0:
-                        try:
-                            from flask import current_app
-
-                            ingest_on = bool(
-                                current_app.config.get("SYNAPSE_LEADS_INGEST", False)
-                            )
-                            if not ingest_on:
-                                line += " — automated lead generation disabled"
-                            elif not getattr(s, "lead_source", False):
-                                line += " — content only (not a Lead source)"
-                        except RuntimeError:
-                            pass
                     lines.append(line)
                 else:
                     line = f"[skip] unknown kind {s.kind!r} id={s.id}"

@@ -15,19 +15,32 @@
   {% set sources_active = ep is not none and ep.startswith('admin.sources_') %}
   {% set leads_active = ep is not none and ep.startswith('admin.leads_') %}
   {% set items_active = ep is not none and ep.startswith('admin.items_') %}
+  {% set snapshots_all_active = ep == 'admin.snapshots_all' %}
+  {% set entities_active = ep is not none and ep.startswith('admin.entities_') %}
   <div class="admin-shell">
     <aside class="admin-sidebar" aria-label="Admin menu">
       <div class="admin-sidebar-top">
         <a href="{{ url_for('admin.dashboard') }}" class="admin-sidebar-brand" aria-label="Synapse — dashboard">Synapse</a>
         <nav class="admin-sidebar-nav" aria-label="Utilities">
           <a href="{{ url_for('admin.dashboard') }}" class="admin-sidebar-link{% if dashboard_active %} is-active{% endif %}" {% if dashboard_active %}aria-current="page"{% endif %}>Dashboard</a>
-          <a href="{{ url_for('admin.sources_list') }}" class="admin-sidebar-link{% if sources_active %} is-active{% endif %}" {% if sources_active %}aria-current="page"{% endif %}>Sources</a>
+          <div class="admin-sidebar-group">
+            <a href="{{ url_for('admin.sources_list') }}" class="admin-sidebar-link admin-sidebar-link--primary{% if sources_active %} is-active{% endif %}" {% if sources_active %}aria-current="page"{% endif %}>Sources</a>
+            <ul class="admin-sidebar-sub" role="list">
+              <li>
+                <a href="{{ url_for('admin.items_list') }}" class="admin-sidebar-link admin-sidebar-link--sub{% if items_active %} is-active{% endif %}" {% if items_active %}aria-current="page"{% endif %}>Content items</a>
+              </li>
+              <li>
+                <a href="{{ url_for('admin.snapshots_all') }}" class="admin-sidebar-link admin-sidebar-link--sub{% if snapshots_all_active %} is-active{% endif %}" {% if snapshots_all_active %}aria-current="page"{% endif %}>Snapshots</a>
+              </li>
+            </ul>
+          </div>
+          <a href="{{ url_for('admin.entities_list') }}" class="admin-sidebar-link{% if entities_active %} is-active{% endif %}" {% if entities_active %}aria-current="page"{% endif %}>Entities</a>
           <a href="{{ url_for('admin.leads_list') }}" class="admin-sidebar-link{% if leads_active %} is-active{% endif %}" {% if leads_active %}aria-current="page"{% endif %}>Leads</a>
-          <a href="{{ url_for('admin.items_list') }}" class="admin-sidebar-link{% if items_active %} is-active{% endif %}" {% if items_active %}aria-current="page"{% endif %}>Content items</a>
         </nav>
       </div>
       <div class="admin-sidebar-footer">
         {% if ollama_llm %}
+        <div class="admin-sidebar-footer-status" aria-label="LLM status">
           {% set _llm_title = (
             'Ollama at ' ~ ollama_llm.host ~ ' · configured model ' ~ ollama_llm.model
           ) %}
@@ -38,14 +51,18 @@
           {% else %}
           <p class="admin-llm-status admin-llm-status--bad" title="{{ _llm_title }} · Start Ollama or set OLLAMA_HOST">LLM: offline</p>
           {% endif %}
+        </div>
         {% endif %}
-        <a href="{{ url_for('public.index') }}" target="_blank" rel="noopener" class="admin-sidebar-muted">Public site</a>
-        {% if current_user.is_authenticated %}
-        <form method="post" action="{{ url_for('admin.logout') }}" class="inline-form admin-sidebar-signout-wrap">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <button type="submit" class="linkish admin-sidebar-signout">Sign out</button>
-        </form>
-        {% endif %}
+        <nav class="admin-sidebar-footer-util" aria-label="Site and session">
+          {% if current_user.is_authenticated %}
+          <form method="post" action="{{ url_for('admin.logout') }}" class="inline-form admin-sidebar-signout-wrap">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="linkish admin-sidebar-signout">Sign out</button>
+          </form>
+          <span class="admin-sidebar-footer-sep" aria-hidden="true"></span>
+          {% endif %}
+          <a href="{{ url_for('public.index') }}" target="_blank" rel="noopener" class="admin-sidebar-footer-link">Public Site</a>
+        </nav>
       </div>
     </aside>
 
@@ -58,5 +75,51 @@
       {% block body %}{% endblock %}
     </div>
   </div>
+  <script>
+(function () {
+  function closeTips(root) {
+    if (!root) return;
+    var panel = root.querySelector("[data-admin-tips-panel]");
+    var trig = root.querySelector("[data-admin-tips-trigger]");
+    if (panel) panel.hidden = true;
+    if (trig) trig.setAttribute("aria-expanded", "false");
+    root.classList.remove("admin-tips--open");
+  }
+
+  function openTips(root) {
+    var panel = root.querySelector("[data-admin-tips-panel]");
+    var trig = root.querySelector("[data-admin-tips-trigger]");
+    if (!panel || !trig) return;
+    document.querySelectorAll(".admin-tips--open").forEach(closeTips);
+    panel.hidden = false;
+    trig.setAttribute("aria-expanded", "true");
+    root.classList.add("admin-tips--open");
+  }
+
+  function toggleTips(root) {
+    var panel = root.querySelector("[data-admin-tips-panel]");
+    if (!panel) return;
+    if (panel.hidden) openTips(root);
+    else closeTips(root);
+  }
+
+  document.addEventListener("click", function (ev) {
+    var trig = ev.target.closest("[data-admin-tips-trigger]");
+    if (trig) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleTips(trig.closest("[data-admin-tips]"));
+      return;
+    }
+    if (!ev.target.closest("[data-admin-tips]")) {
+      document.querySelectorAll(".admin-tips--open").forEach(closeTips);
+    }
+  });
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") document.querySelectorAll(".admin-tips--open").forEach(closeTips);
+  });
+})();
+  </script>
 </body>
 </html>

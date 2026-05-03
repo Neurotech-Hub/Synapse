@@ -1,0 +1,8 @@
+{# Field-level WTForms validation (call after rendering the widget). #}
+{% macro field_errors(field) %}
+{% if field.errors %}
+<ul class="field-errors" role="alert">
+{% for err in field.errors %}<li>{{ err }}</li>{% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}

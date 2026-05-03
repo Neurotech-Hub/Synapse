@@ -1,0 +1,40 @@
+{# Mirrors app.web.admin.forms.normalize_entity_slug_input for preview only. #}
+<script>
+(function () {
+  function collapseUnderscores(s) {
+    var t = s;
+    while (t.indexOf("__") !== -1) t = t.replace(/__/g, "_");
+    return t;
+  }
+
+  /** Match server: collapse __ then strip underscores from ends then hyphens from ends */
+  function synapseNormalizeEntitySlugFromDisplay(displayName) {
+    if (!displayName || !String(displayName).trim()) return "";
+    var s = String(displayName).trim().toLowerCase().replace(/ /g, "_");
+    s = s.replace(/[^a-z0-9_-]+/g, "");
+    s = collapseUnderscores(s);
+    s = s.replace(/^_+|_+$/g, "");
+    s = s.replace(/^-+|-+$/g, "");
+    return s;
+  }
+
+  var input = document.getElementById("entity-display-name");
+  var preview = document.getElementById("entity-slug-live");
+  if (!input || !preview) return;
+
+  function tick() {
+    var raw = synapseNormalizeEntitySlugFromDisplay(input.value);
+    if (!raw) {
+      preview.textContent = "Slug preview: —";
+      preview.classList.add("entity-slug-live--empty");
+      return;
+    }
+    preview.textContent = "Slug preview: " + raw;
+    preview.classList.remove("entity-slug-live--empty");
+  }
+
+  input.addEventListener("input", tick);
+  input.addEventListener("change", tick);
+  tick();
+})();
+</script>
