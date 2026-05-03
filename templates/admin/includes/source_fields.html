@@ -1,28 +1,2 @@
   {{ form.hidden_tag() }}
-  <div class="field-group">
-    {{ form.url.label(class_='field-label') }}
-    {{ form.url(class_='field-input', size=72) }}
-    <p class="visit-url-helper muted">
-      <a id="source-visit-link" href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">Visit URL</a>
-    </p>
-  </div>
-  <div class="field-group">
-    {{ form.kind.label(class_='field-label') }}
-    {{ form.kind(class_='field-input') }}
-  </div>
-  <div class="field-group">
-    {{ form.label.label(class_='field-label') }}
-    {{ form.label(class_='field-input', size=72) }}
-  </div>
-  <div class="field-group field-group-check">
-    <label class="field-check-label">
-      {{ form.hide_from_polling(class_='field-check-input') }}
-      <span>{{ form.hide_from_polling.label.text }}</span>
-    </label>
-  </div>
-  <div class="field-group field-group-check">
-    <label class="field-check-label">
-      {{ form.lead_source(class_='field-check-input') }}
-      <span>{{ form.lead_source.label.text }}</span>
-    </label>
-  </div>
+  {% include "admin/includes/source_fields_inner.html" %}

@@ -1,0 +1,268 @@
+{# Searchable multi-select with chips; ``assoc_picker_bootstrap`` … ``picker_suffix`` or ``picker_suffix_entity_assoc``. #}
+{% set ps = (picker_suffix if picker_suffix is defined else picker_suffix_entity_assoc) %}
+<script type="application/json" id="assoc-tag-picker-bootstrap-{{ ps }}">{{ assoc_picker_bootstrap | tojson }}</script>
+
+<div class="entity-picker entity-side-assoc-picker-root" id="entity-side-assoc-picker-{{ ps }}">
+  <div id="entity-side-assoc-picker-chips-{{ ps }}" class="entity-picker-chips" role="group" aria-labelledby="assoc-picker-label-{{ ps }}"></div>
+  <div id="entity-side-assoc-picker-hidden-inputs-{{ ps }}"></div>
+  <span id="assoc-picker-label-{{ ps }}" class="field-label field-label-block">{{ assoc_picker_bootstrap.combobox_label }}</span>
+  <div class="entity-picker-combobox">
+    <input
+      type="text"
+      id="entity-side-assoc-picker-search-{{ ps }}"
+      class="field-input entity-picker-search-input"
+      placeholder="{{ assoc_picker_bootstrap.search_placeholder | default('Search…') }}"
+      autocomplete="off"
+      role="combobox"
+      aria-autocomplete="list"
+      aria-expanded="false"
+      aria-controls="entity-side-assoc-picker-listbox-{{ ps }}"
+      aria-labelledby="assoc-picker-label-{{ ps }}"
+    />
+    <ul class="entity-picker-dropdown" id="entity-side-assoc-picker-listbox-{{ ps }}" role="listbox" aria-label="{{ assoc_picker_bootstrap.list_aria_label }}" hidden></ul>
+  </div>
+</div>
+
+<script>
+(function () {
+  var suf = {{ ps|tojson }};
+  var bootEl = document.getElementById("assoc-tag-picker-bootstrap-" + suf);
+  var root = document.getElementById("entity-side-assoc-picker-" + suf);
+  if (!bootEl || !root) return;
+  var BOOT;
+  try {
+    BOOT = JSON.parse(bootEl.textContent || "{}");
+  } catch (e) {
+    return;
+  }
+  var FIELD = BOOT.field_name || "association_ids";
+  var OPTIONS = Array.isArray(BOOT.options) ? BOOT.options : [];
+  var INITIAL = Array.isArray(BOOT.initial) ? BOOT.initial : [];
+  var emptyChipMsg = BOOT.empty_chip_text || "Nothing linked yet — search below.";
+  var addLbl = BOOT.combobox_label || "Add";
+
+  var chips = document.getElementById("entity-side-assoc-picker-chips-" + suf);
+  var hidWrap = document.getElementById("entity-side-assoc-picker-hidden-inputs-" + suf);
+  var search = document.getElementById("entity-side-assoc-picker-search-" + suf);
+  var list = document.getElementById("entity-side-assoc-picker-listbox-" + suf);
+  if (!chips || !hidWrap || !search || !list) return;
+
+  var combo = root.querySelector(".entity-picker-combobox");
+  var addLabelSpan = root.querySelector("#assoc-picker-label-" + suf);
+  if (!combo) return;
+
+  function displayPrimary(o) {
+    var lb = ((o.label || "").trim());
+    var sub = ((o.subtitle || "").trim());
+    var text = lb || sub || "(" + String(o.id) + ")";
+    if (text.length > 72) return text.slice(0, 72) + "…";
+    return text;
+  }
+
+  function isInsideInteractiveShell(t) {
+    if (!t || t.nodeType !== 1) return false;
+    if (combo.contains(t)) return true;
+    return !!(addLabelSpan && (addLabelSpan === t || addLabelSpan.contains(t)));
+  }
+
+  var selected = new Map();
+
+  function optById(rawId) {
+    var id = Number(rawId);
+    for (var i = 0; i < OPTIONS.length; i++) {
+      if (Number(OPTIONS[i].id) === id) return OPTIONS[i];
+    }
+    return null;
+  }
+
+  function sortKey(o) {
+    return (displayPrimary(o) + " " + String(o.id)).toLowerCase();
+  }
+
+  function syncHiddens() {
+    hidWrap.innerHTML = "";
+    var ids = Array.from(selected.keys()).sort(function (a, b) {
+      return sortKey(selected.get(a)).localeCompare(sortKey(selected.get(b)));
+    });
+    ids.forEach(function (id) {
+      var inp = document.createElement("input");
+      inp.type = "hidden";
+      inp.name = FIELD;
+      inp.value = String(id);
+      hidWrap.appendChild(inp);
+    });
+  }
+
+  function removeChip(id) {
+    selected.delete(id);
+    syncHiddens();
+    renderChips();
+    refreshDropdown();
+  }
+
+  function renderChips() {
+    chips.innerHTML = "";
+    var ids = Array.from(selected.keys()).sort(function (a, b) {
+      return sortKey(selected.get(a)).localeCompare(sortKey(selected.get(b)));
+    });
+    if (!ids.length) {
+      var p = document.createElement("p");
+      p.className = "muted entity-picker-empty";
+      p.textContent = emptyChipMsg;
+      chips.appendChild(p);
+      return;
+    }
+    ids.forEach(function (id) {
+      var o = selected.get(id);
+      var chip = document.createElement("span");
+      chip.className = "entity-chip entity-chip--assoc";
+
+      var label = document.createElement("span");
+      label.className = "entity-chip-label";
+      label.textContent = displayPrimary(o);
+
+      var subText = ((o.subtitle || "").trim());
+      var subSpan = null;
+      if (subText) {
+        subSpan = document.createElement("span");
+        subSpan.className = "entity-chip-kind muted mono";
+        subSpan.textContent = "(" + subText + ")";
+      }
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "entity-chip-remove";
+      btn.setAttribute(
+        "aria-label",
+        "Remove " + addLbl + " " + (displayPrimary(o) + " · " + String(id)).trim()
+      );
+      btn.innerHTML = "×";
+
+      btn.addEventListener("click", function () {
+        removeChip(id);
+        search.focus();
+      });
+
+      chip.appendChild(label);
+      if (subSpan) chip.appendChild(subSpan);
+      chip.appendChild(btn);
+      chips.appendChild(chip);
+    });
+  }
+
+  function filterOptions(qRaw) {
+    var q = (qRaw || "").trim().toLowerCase();
+    var out = [];
+    for (var i = 0; i < OPTIONS.length; i++) {
+      var o = OPTIONS[i];
+      var id = Number(o.id);
+      if (selected.has(id)) continue;
+      var hay = (
+        String(o.label || "") +
+          " " +
+          String(o.subtitle || "") +
+          " " +
+          String(o.id)
+      ).toLowerCase();
+      if (!q || hay.indexOf(q) !== -1) out.push(o);
+    }
+    out.sort(function (a, b) {
+      return sortKey(a).localeCompare(sortKey(b));
+    });
+    var cap = q ? 40 : 12;
+    return out.slice(0, cap);
+  }
+
+  function setOpen(isOpen) {
+    list.hidden = !isOpen;
+    search.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
+  function refreshDropdown() {
+    var rows = filterOptions(search.value);
+    list.innerHTML = "";
+    if (!rows.length) {
+      var li0 = document.createElement("li");
+      li0.className = "entity-picker-dropdown-empty muted";
+      li0.textContent = search.value.trim() ? "No matches." : "All items are already linked.";
+      li0.setAttribute("role", "presentation");
+      list.appendChild(li0);
+      setOpen(true);
+      return;
+    }
+    rows.forEach(function (o) {
+      var li = document.createElement("li");
+      li.className = "entity-picker-option";
+      li.setAttribute("role", "option");
+      li.tabIndex = -1;
+
+      var t = document.createElement("span");
+      t.className = "entity-picker-option-title";
+      t.textContent = displayPrimary(o);
+
+      var subPick = ((o.subtitle || "").trim());
+      li.appendChild(t);
+      if (subPick) {
+        var meta = document.createElement("span");
+        meta.className = "entity-picker-option-kind muted mono";
+        meta.textContent = "(" + subPick + ")";
+        li.appendChild(document.createTextNode(" "));
+        li.appendChild(meta);
+      }
+
+      li.addEventListener("mousedown", function (ev) {
+        ev.preventDefault();
+        var id = Number(o.id);
+        selected.set(id, optById(id) || o);
+        syncHiddens();
+        renderChips();
+        search.value = "";
+        setOpen(false);
+        search.blur();
+      });
+
+      list.appendChild(li);
+    });
+    setOpen(true);
+  }
+
+  selected.clear();
+  INITIAL.forEach(function (raw) {
+    var id = Number(raw);
+    var o = optById(id);
+    if (o) selected.set(id, o);
+  });
+  syncHiddens();
+  renderChips();
+
+  search.addEventListener("focus", function () {
+    refreshDropdown();
+  });
+
+  search.addEventListener("input", function () {
+    refreshDropdown();
+  });
+
+  search.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") {
+      setOpen(false);
+    }
+  });
+
+  function closeDropdownIfBackdrop(ev) {
+    if (ev.button != null && ev.button !== 0) return;
+    if (isInsideInteractiveShell(ev.target)) return;
+    setOpen(false);
+  }
+  document.addEventListener("pointerdown", closeDropdownIfBackdrop, true);
+
+  search.addEventListener("blur", function () {
+    setTimeout(function () {
+      var ae = document.activeElement;
+      if (!isInsideInteractiveShell(ae)) setOpen(false);
+    }, 0);
+  });
+
+  bootEl.remove();
+})();
+</script>

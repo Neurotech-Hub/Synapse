@@ -179,6 +179,36 @@ body.public {
   flex-wrap: wrap;
 }
 
+.composer-row--meta {
+  margin-top: 0.75rem;
+  align-items: center;
+}
+
+.composer-intent-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  color: rgba(20, 20, 20, 0.55);
+}
+
+.composer-intent-caption {
+  flex: 0 0 auto;
+}
+
+.composer-intent-select {
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--stroke-strong);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text);
+  max-width: 100%;
+}
+
 .composer-input {
   flex: 1 1 14rem;
   min-width: 0;

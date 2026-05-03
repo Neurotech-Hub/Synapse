@@ -1,10 +1,16 @@
 <section class="admin-tip-sec">
   <h3 class="admin-tip-h">Display name &amp; slug</h3>
   <p class="admin-tip-p"><strong>Display name</strong> is what you edit: titles, departments, punctuation (“Washington University Neurotechnology Lab”). The form shows a live <strong>slug preview</strong> derived from this text.</p>
-  <p class="admin-tip-p"><strong>Slug</strong> (created on save): lowercase Latin letters/digits plus <code>_</code>/<code>-</code>, used in prompt catalogs (<code>primary_entity_slug</code>) and dedup. If someone else already took that slug, we assign <code>…​_2</code>, <code>…​_3</code>, etc.</p>
+  <p class="admin-tip-p"><strong>Slug</strong> is generated from the display name. On save we pick a URL-safe slug—lowercase Latin letters and digits plus <code>_</code>/<code>-</code>—and use it in prompt catalogs (<code>primary_entity_slug</code>) and dedup. If that slug collides with an existing row, we append <code>_2</code>, <code>_3</code>, and so on.</p>
   <p class="admin-tip-p">Editing the display name regenerates the slug on save — if you rename something that other leads reference, fingerprints and LLM resolution may need a follow‑up refresh.</p>
 </section>
 <section class="admin-tip-sec">
-  <h3 class="admin-tip-h">Kind</h3>
+  <h3 class="admin-tip-h">Kind &amp; linked data</h3>
   <p class="admin-tip-p">Choose the type that best matches how you reference the subject in catalogs (<code>lab</code>, <code>person</code>, <code>place</code>, <code>org</code>).</p>
+  <p class="admin-tip-p">For <code>person</code> rows only, the <strong>Persona</strong> dashboard (top of Edit entity) snapshots linked sources via Ollama when you choose <strong>Rebuild persona</strong> — catalog <strong>Save</strong> does not run it. <strong>Institution</strong> and <strong>Department</strong> show after a successful build and seed the next rebuild. Poll/source saves can still enqueue background persona refreshes for linked entities.</p>
+  <p class="admin-tip-p">PubMed-style RSS usually puts full abstracts in <code>content:encoded</code>; we persist that text on poll. Fetching NIH PubMed URLs uses browser-like headers and prefers <strong>curl</strong> when installed (otherwise urllib). Disable curl with <code>SYNAPSE_RSS_PUBMED_CURL=0</code>. Persona prompts default to <code>SYNAPSE_OLLAMA_IDENTITY_NUM_CTX=32768</code> so large feeds are not silently truncated — lower it if your Ollama/model errors on context size, set <code>0</code> for server defaults, or pass JSON via <code>SYNAPSE_OLLAMA_IDENTITY_OPTIONS</code>. Evidence packing uses <code>SYNAPSE_IDENTITY_FULL_TEXT_ITEMS</code>, <code>SYNAPSE_IDENTITY_CONTENT_BUDGET_CHARS</code>, <code>SYNAPSE_IDENTITY_CHUNK_MAX_CHARS</code>, <code>SYNAPSE_IDENTITY_PAPER_DAYS</code>.</p>
+</section>
+<section class="admin-tip-sec">
+  <h3 class="admin-tip-h">Associated sources</h3>
+  <p class="admin-tip-p">Link ingests where this catalog row should appear: <strong>Poll now</strong>, identity evidence, Neurotech Hub, and the lead catalog. Pairings save with <strong>Save</strong> on this form. You can edit the same pairing from each source’s <strong>Tracked entities</strong>.</p>
 </section>

@@ -1,0 +1,267 @@
+{# Searchable dropdown + removable chips for source↔entity tags. Expects entity_picker_bootstrap dict. #}
+<script type="application/json" id="entity-picker-bootstrap">{{ entity_picker_bootstrap | tojson }}</script>
+
+<div class="entity-picker" id="source-entity-picker">
+  <div id="entity-picker-chips" class="entity-picker-chips" role="group" aria-label="Associated entities"></div>
+  <div id="entity-picker-hidden-inputs">
+    {% for eid in selected_entity_ids|sort %}
+    <input type="hidden" name="entity_ids" value="{{ eid }}" data-initial-entity-tag="1"/>
+    {% endfor %}
+  </div>
+  <label class="field-label" for="entity-picker-search">Add entity</label>
+  <div class="entity-picker-combobox">
+    <input
+      type="text"
+      id="entity-picker-search"
+      class="field-input entity-picker-search-input"
+      placeholder="Search by name, slug, or type (e.g. person)…"
+      autocomplete="off"
+      role="combobox"
+      aria-autocomplete="list"
+      aria-expanded="false"
+      aria-controls="entity-picker-listbox"
+    />
+    <ul class="entity-picker-dropdown" id="entity-picker-listbox" role="listbox" aria-label="Entity matches" hidden></ul>
+  </div>
+</div>
+
+<script>
+(function () {
+  var bootEl = document.getElementById("entity-picker-bootstrap");
+  var root = document.getElementById("source-entity-picker");
+  if (!bootEl || !root) return;
+  var BOOT;
+  try {
+    BOOT = JSON.parse(bootEl.textContent || "{}");
+  } catch (e) {
+    return;
+  }
+  var OPTIONS = Array.isArray(BOOT.options) ? BOOT.options : [];
+  if (!OPTIONS.length) return;
+
+  var chips = document.getElementById("entity-picker-chips");
+  var hidWrap = document.getElementById("entity-picker-hidden-inputs");
+  var search = document.getElementById("entity-picker-search");
+  var list = document.getElementById("entity-picker-listbox");
+  if (!chips || !hidWrap || !search || !list) return;
+
+  var combo = root.querySelector(".entity-picker-combobox");
+  var addLabel = root.querySelector('label[for="entity-picker-search"]');
+  if (!combo) return;
+
+  function isInsideInteractiveShell(t) {
+    if (!t || t.nodeType !== 1) return false;
+    if (combo.contains(t)) return true;
+    return !!(addLabel && (addLabel === t || addLabel.contains(t)));
+  }
+
+  var selected = new Map();
+
+  function optById(rawId) {
+    var id = Number(rawId);
+    for (var i = 0; i < OPTIONS.length; i++) {
+      if (Number(OPTIONS[i].id) === id) return OPTIONS[i];
+    }
+    return null;
+  }
+
+  function readHiddensIntoSelected() {
+    selected.clear();
+    hidWrap.querySelectorAll('input[name="entity_ids"]').forEach(function (inp) {
+      var id = parseInt(inp.value, 10);
+      if (!isFinite(id)) return;
+      var o = optById(id);
+      if (o) selected.set(id, o);
+    });
+  }
+
+  function syncHiddens() {
+    hidWrap.innerHTML = "";
+    var ids = Array.from(selected.keys()).sort(function (a, b) {
+      var na =
+        ((selected.get(a).name || "") + " " + (selected.get(a).slug || "") + " " + (selected.get(a).kind || "")).toLowerCase();
+      var nb =
+        ((selected.get(b).name || "") + " " + (selected.get(b).slug || "") + " " + (selected.get(b).kind || "")).toLowerCase();
+      return na.localeCompare(nb);
+    });
+    ids.forEach(function (id) {
+      var inp = document.createElement("input");
+      inp.type = "hidden";
+      inp.name = "entity_ids";
+      inp.value = String(id);
+      hidWrap.appendChild(inp);
+    });
+  }
+
+  function removeChip(id) {
+    selected.delete(id);
+    syncHiddens();
+    renderChips();
+    refreshDropdown();
+  }
+
+  function renderChips() {
+    chips.innerHTML = "";
+    var ids = Array.from(selected.keys()).sort(function (a, b) {
+      var na =
+        ((selected.get(a).name || "") + " " + (selected.get(a).slug || "") + " " + (selected.get(a).kind || "")).toLowerCase();
+      var nb =
+        ((selected.get(b).name || "") + " " + (selected.get(b).slug || "") + " " + (selected.get(b).kind || "")).toLowerCase();
+      return na.localeCompare(nb);
+    });
+    if (!ids.length) {
+      chips.appendChild(emptyNote());
+      return;
+    }
+    ids.forEach(function (id) {
+      var o = selected.get(id);
+      var chip = document.createElement("span");
+      chip.className = "entity-chip";
+      chip.setAttribute("data-entity-chip-id", String(id));
+
+      var label = document.createElement("span");
+      label.className = "entity-chip-label";
+      label.textContent = o.name || o.slug || String(id);
+
+      var kindSpan = document.createElement("span");
+      kindSpan.className = "entity-chip-kind muted mono";
+      kindSpan.textContent = "(" + (o.kind || "—") + ")";
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "entity-chip-remove";
+      btn.setAttribute("aria-label", "Remove " + (o.name || o.slug));
+      btn.innerHTML = "×";
+
+      btn.addEventListener("click", function () {
+        removeChip(id);
+        search.focus();
+      });
+
+      chip.appendChild(label);
+      chip.appendChild(kindSpan);
+      chip.appendChild(btn);
+      chips.appendChild(chip);
+    });
+  }
+
+  function emptyNote() {
+    var p = document.createElement("p");
+    p.className = "muted entity-picker-empty";
+    p.textContent = "No entities linked yet — search above to add.";
+    return p;
+  }
+
+  function filterOptions(qRaw) {
+    var q = (qRaw || "").trim().toLowerCase();
+    var out = [];
+    for (var i = 0; i < OPTIONS.length; i++) {
+      var o = OPTIONS[i];
+      var id = Number(o.id);
+      if (selected.has(id)) continue;
+      var hay = ((o.name || "") + " " + (o.slug || "") + " " + (o.kind || "")).toLowerCase();
+      if (!q || hay.indexOf(q) !== -1) out.push(o);
+    }
+    out.sort(function (a, b) {
+      var na = (a.name || a.slug || a.kind || "").toLowerCase();
+      var nb = (b.name || b.slug || b.kind || "").toLowerCase();
+      return na.localeCompare(nb);
+    });
+    var cap = q ? 50 : 16;
+    return out.slice(0, cap);
+  }
+
+  function setOpen(isOpen) {
+    list.hidden = !isOpen;
+    search.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
+  function refreshDropdown() {
+    var rows = filterOptions(search.value);
+    list.innerHTML = "";
+    if (!rows.length) {
+      var li0 = document.createElement("li");
+      li0.className = "entity-picker-dropdown-empty muted";
+      li0.textContent = search.value.trim() ? "No matching entities." : "All matching entities are already linked.";
+      li0.setAttribute("role", "presentation");
+      list.appendChild(li0);
+      setOpen(true);
+      return;
+    }
+    rows.forEach(function (o) {
+      var li = document.createElement("li");
+      li.className = "entity-picker-option";
+      li.setAttribute("role", "option");
+      li.setAttribute("data-entity-option-id", String(o.id));
+      li.tabIndex = -1;
+
+      var t = document.createElement("span");
+      t.className = "entity-picker-option-title";
+      t.textContent = o.name || o.slug || o.id;
+
+      var kindOpt = document.createElement("span");
+      kindOpt.className = "entity-picker-option-kind muted mono";
+      kindOpt.textContent = "(" + (o.kind || "—") + ")";
+
+      li.appendChild(t);
+      li.appendChild(document.createTextNode(" "));
+      li.appendChild(kindOpt);
+
+      li.addEventListener("mousedown", function (ev) {
+        ev.preventDefault();
+        var id = Number(o.id);
+        selected.set(id, optById(id) || o);
+        syncHiddens();
+        renderChips();
+        search.value = "";
+        setOpen(false);
+        search.blur();
+      });
+
+      list.appendChild(li);
+    });
+    setOpen(true);
+  }
+
+  readHiddensIntoSelected();
+
+  Array.isArray(BOOT.initial) &&
+    BOOT.initial.forEach(function (raw) {
+      var id = Number(raw);
+      var o = optById(id);
+      if (o && !selected.has(id)) selected.set(id, o);
+    });
+  syncHiddens();
+  renderChips();
+
+  search.addEventListener("focus", function () {
+    refreshDropdown();
+  });
+
+  search.addEventListener("input", function () {
+    refreshDropdown();
+  });
+
+  search.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") {
+      setOpen(false);
+    }
+  });
+
+  function closeDropdownIfBackdrop(ev) {
+    if (ev.button != null && ev.button !== 0) return;
+    if (isInsideInteractiveShell(ev.target)) return;
+    setOpen(false);
+  }
+  document.addEventListener("pointerdown", closeDropdownIfBackdrop, true);
+
+  search.addEventListener("blur", function () {
+    setTimeout(function () {
+      var ae = document.activeElement;
+      if (!isInsideInteractiveShell(ae)) setOpen(false);
+    }, 0);
+  });
+
+  bootEl.remove();
+})();
+</script>

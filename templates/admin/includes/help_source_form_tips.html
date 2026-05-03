@@ -1,6 +1,7 @@
 <section class="admin-tip-sec">
   <h3 class="admin-tip-h">URL &amp; kind</h3>
   <ul class="admin-tip-ul">
+    <li><strong>Label</strong> is optional—it appears in the <strong>Sources</strong> list so non-obvious URLs stay scannable.</li>
     <li>Use <strong>Visit URL</strong> (after you type a URL) to confirm the link opens.</li>
     <li><strong>RSS feed</strong> — one content item per feed entry.</li>
     <li><strong>HTML page</strong> — we store a SHA-256 of the page each poll; a new hash creates a new content item (change detection).</li>
@@ -14,7 +15,7 @@
   </ul>
 </section>
 <section class="admin-tip-sec">
-  <h3 class="admin-tip-h">Lead source (Hub)</h3>
-  <p class="admin-tip-p">Check this for Neurotech Hub–owned feeds (the <em>Hub</em> signal). Leave external monitors unchecked (<em>world</em> signal).</p>
-  <p class="admin-tip-p">Poll only ingests into content items. Qualified leads are created by <strong>Run lead qualification</strong> on the dashboard when <code>SYNAPSE_LEADS_QUALIFY=1</code> and Ollama is available — not during Poll.</p>
+  <h3 class="admin-tip-h">Entities &amp; Hub</h3>
+  <p class="admin-tip-p">After you save, tag <strong>Neurotech Hub</strong> on the source edit page — that ingest then counts toward the Hub corpus snippets used when you run <strong>lead reports</strong> under <strong>Leads</strong>. Prospect feeds can stay untagged if you prefer them excluded from Hub evidence.</p>
+  <p class="admin-tip-p">Poll only ingests content items. Lead reports queue from <strong>Leads</strong> (not poll).</p>
 </section>

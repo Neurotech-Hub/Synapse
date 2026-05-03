@@ -1,13 +1,12 @@
 <section class="admin-tip-sec">
-  <h3 class="admin-tip-h">Lead pipeline</h3>
-  <p class="admin-tip-p">Turn qualification on, tune caps, then run a batch. <code>[lead-qual]</code> summaries appear under <strong>Recent qualification logs</strong> on this page.</p>
-  <p class="admin-tip-p">If <strong>Run lead qualification</strong> is not shown, open <strong>Lead pipeline</strong> in the header, enable qualification, save, then the run button appears.</p>
+  <h3 class="admin-tip-h">Lead reports</h3>
+  <p class="admin-tip-p">Click <strong>New Report</strong> for a modal to queue synthesis for one person, organization, or place. You stay on this page — status updates while the job runs; <code>[lead-report]</code> lines appear in the log below when complete. Hub defaults live under the cog.</p>
 </section>
 <section class="admin-tip-sec">
-  <h3 class="admin-tip-h">Where leads come from</h3>
-  <p class="admin-tip-p">Rows are created by <strong>Run lead qualification</strong> on this page after you enable it in <strong>Lead pipeline</strong> and save (requires Ollama). <strong>Poll now</strong> on the Dashboard only fills content items, not this list.</p>
+  <h3 class="admin-tip-h">Hub settings</h3>
+  <p class="admin-tip-p">Choose the default <strong>Hub corpus organization</strong> whose ingests supply Hub excerpts. Individual runs can override this when you queue a report.</p>
 </section>
 <section class="admin-tip-sec">
-  <h3 class="admin-tip-h">Setup</h3>
-  <p class="admin-tip-p">Tag <strong>Tracked entities</strong> on each source (<strong>Sources → View</strong>). Mark Hub-owned feeds with <strong>Lead source</strong>; leave external feeds unchecked for the world signal.</p>
+  <h3 class="admin-tip-h">Tuning</h3>
+  <p class="admin-tip-p">Prompts live under <code>prompts/lead_report_*.txt</code>. Caps use <code>app/leads/lead_report_budgets.py</code> and optional <code>SYNAPSE_LEAD_REPORT_*</code> environment variables.</p>
 </section>

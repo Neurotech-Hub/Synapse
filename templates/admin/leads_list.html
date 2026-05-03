@@ -1,210 +1,250 @@
 {% extends "admin/base.html" %}
 {% import "admin/includes/help_macros.html" as syn_help %}
-{% block title %}Leads{% endblock %}
+{% block title %}Lead reports{% endblock %}
 {% block body %}
 <header class="page-head page-head--compact">
-  <h1>Lead candidates</h1>
+  <h1>Lead reports</h1>
   <div class="page-head-actions">
-    {% if synapse_leads_qual_enabled %}
-    <div class="leads-pipeline-head-split" role="group" aria-label="Lead qualification">
-      <form method="post" action="{{ url_for('admin.lead_qualify_now') }}" class="leads-pipeline-run-form-inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        <button type="submit" class="primary-btn primary-btn-compact leads-pipeline-run-btn leads-pipeline-run-btn--split-main"{% if lead_qual_busy %} disabled aria-disabled="true"{% endif %}>Run lead qualification</button>
-      </form>
-      <button type="button" class="leads-pipeline-settings-trigger" data-leads-pipeline-dialog-open aria-label="Edit lead pipeline settings" title="Lead pipeline settings">
+    <div class="leads-pipeline-head-split" role="group" aria-label="Lead reports">
+      <button type="button" class="primary-btn primary-btn-compact leads-pipeline-run-btn--split-main" data-lead-report-dialog-open>New Report</button>
+      <button type="button" class="leads-pipeline-settings-trigger" data-leads-pipeline-dialog-open aria-label="Hub settings" title="Hub settings">
         <svg class="leads-pipeline-settings-trigger-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
     </div>
-    {% else %}
-    <button type="button" class="leads-pipeline-settings-solo" data-leads-pipeline-dialog-open>
-      <span>Lead pipeline</span>
-      <svg class="leads-pipeline-settings-solo-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-    </button>
-    {% endif %}
     {% call syn_help.tips_bubble() %}{% include "admin/includes/help_leads_list.html" %}{% endcall %}
   </div>
 </header>
 
-{% if synapse_leads_qual_enabled and lead_qual_busy %}
-<p class="leads-pipeline-run-banner muted">Running… <code>[lead-qual]</code> summaries will appear under <strong>Recent qualification logs</strong> below when finished.</p>
+{% if lead_report_busy %}
+<p id="lead-report-run-banner"
+   class="leads-pipeline-run-banner muted"
+   data-poll-report-status="{{ url_for('admin.lead_report_run_status') }}"
+   {% if active_lead_report_id %}data-active-report-id="{{ active_lead_report_id }}"{% endif %}
+   aria-live="polite">
+  <strong>Running</strong>{% if active_lead_report_id %} — report #{{ active_lead_report_id }}{% endif %}
+  · <span class="lead-report-phase-text">{{ lead_report_phase or 'Starting…' }}</span>
+  <span class="muted"> Watch <code>[lead-report]</code> in the logs below when finished.</span>
+</p>
 {% endif %}
 
 <dialog id="leads-pipeline-dialog" class="admin-dialog leads-pipeline-settings-dialog" aria-labelledby="leads-pipeline-dialog-title">
   <div class="admin-dialog-sheet">
     <div class="admin-dialog-head">
-      <h2 id="leads-pipeline-dialog-title" class="admin-dialog-title">Lead pipeline</h2>
+      <h2 id="leads-pipeline-dialog-title" class="admin-dialog-title">Hub settings</h2>
       <button type="button" class="admin-dialog-close" data-leads-pipeline-dialog-close aria-label="Close">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
       </button>
     </div>
     <div class="admin-dialog-body">
       <form method="post" action="{{ url_for('admin.leads_pipeline_settings', **request.args.to_dict(flat=True)) }}" class="admin-form leads-pipeline-form">
-        {{ pipeline_form.hidden_tag() }}
+        {{ hub_pipeline_form.hidden_tag() }}
         <div class="leads-pipeline-form-stack">
-          <p class="muted leads-pipeline-version-readonly">Prompt version <strong>{{ pipeline_prompt_version }}</strong> — advances automatically when you change the prompt below.</p>
-          <div class="field-group leads-pipeline-field leads-pipeline-field--prompt">
-            {{ pipeline_form.qualified_lead_prompt.label(class_='field-label') }}
-            <p class="field-hint muted leads-pipeline-prompt-hint">{{ pipeline_form.qualified_lead_prompt.description }}</p>
-            {{ pipeline_form.qualified_lead_prompt(class_='field-input leads-pipeline-prompt-textarea') }}
-            {% if pipeline_form.qualified_lead_prompt.errors %}
-            <ul class="field-errors">
-              {% for err in pipeline_form.qualified_lead_prompt.errors %}<li>{{ err }}</li>{% endfor %}
-            </ul>
-            {% endif %}
-          </div>
-          <div class="leads-pipeline-metrics" role="group" aria-label="Batch limits">
-            <div class="field-group leads-pipeline-field">
-              <div class="field-label-row">
-                {{ pipeline_form.max_hub_items.label(class_='field-label') }}
-                <button type="button" class="field-info-btn" popovertarget="pipeline-hint-hub" aria-label="About Hub snippets (max)" title="{{ pipeline_form.max_hub_items.description }}">
-                  <svg class="field-info-btn-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                </button>
-              </div>
-              <div id="pipeline-hint-hub" popover class="field-info-popover">{{ pipeline_form.max_hub_items.description }}</div>
-              {{ pipeline_form.max_hub_items(class_='field-input field-input-compact') }}
-            </div>
-            <div class="field-group leads-pipeline-field">
-              <div class="field-label-row">
-                {{ pipeline_form.max_candidates_per_run.label(class_='field-label') }}
-                <button type="button" class="field-info-btn" popovertarget="pipeline-hint-world" aria-label="About World items (max)" title="{{ pipeline_form.max_candidates_per_run.description }}">
-                  <svg class="field-info-btn-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                </button>
-              </div>
-              <div id="pipeline-hint-world" popover class="field-info-popover">{{ pipeline_form.max_candidates_per_run.description }}</div>
-              {{ pipeline_form.max_candidates_per_run(class_='field-input field-input-compact') }}
-            </div>
-            <div class="field-group leads-pipeline-field">
-              <div class="field-label-row">
-                {{ pipeline_form.entity_catalog_max.label(class_='field-label') }}
-                <button type="button" class="field-info-btn" popovertarget="pipeline-hint-entity" aria-label="About Entity lines (max)" title="{{ pipeline_form.entity_catalog_max.description }}">
-                  <svg class="field-info-btn-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                </button>
-              </div>
-              <div id="pipeline-hint-entity" popover class="field-info-popover">{{ pipeline_form.entity_catalog_max.description }}</div>
-              {{ pipeline_form.entity_catalog_max(class_='field-input field-input-compact') }}
-            </div>
+          <p class="muted contextual-note">Report prompts and evidence budgets: <code>prompts/lead_report_*.txt</code>, <code>app/leads/lead_report_budgets.py</code>, and Ollama <code>SYNAPSE_LEAD_REPORT_NUM_CTX</code>.</p>
+          <div class="field-group leads-pipeline-field">
+            {{ hub_pipeline_form.hub_organization_id.label(class_='field-label') }}
+            <p class="field-hint muted">{{ hub_pipeline_form.hub_organization_id.description }}</p>
+            {{ hub_pipeline_form.hub_organization_id(class_='field-input') }}
           </div>
         </div>
         <div class="form-submit-row leads-pipeline-submit">
-          {{ pipeline_form.submit(class_='primary-btn primary-btn-compact') }}
-          <div class="field-group field-group-check leads-pipeline-field leads-pipeline-enable">
-            <label class="field-check-label">
-              {{ pipeline_form.qualify_enabled(class_='field-check-input') }}
-              <span>{{ pipeline_form.qualify_enabled.label.text }}</span>
-            </label>
-          </div>
+          {{ hub_pipeline_form.submit(class_='primary-btn primary-btn-compact') }}
         </div>
       </form>
     </div>
   </div>
 </dialog>
 
-<div class="leads-qual-logs">
-  {% set logs = qual_logs %}
-  {% set heading_h2 = "Recent qualification logs" %}
-  {% set log_empty_message = "No qualification runs logged yet." %}
+<dialog id="lead-report-new-dialog" class="admin-dialog leads-report-new-dialog" aria-labelledby="lead-report-new-dialog-title">
+  <div class="admin-dialog-sheet">
+    <div class="admin-dialog-head">
+      <h2 id="lead-report-new-dialog-title" class="admin-dialog-title">New lead report</h2>
+      <button type="button" class="admin-dialog-close" data-lead-report-dialog-close aria-label="Close">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="admin-dialog-body">
+      <p class="muted contextual-note leads-report-new-intro">Runs in the background (may take minutes). Uses <code>prompts/lead_report_*.txt</code> and Ollama <code>SYNAPSE_LEAD_REPORT_NUM_CTX</code>.</p>
+
+      <form method="post" action="{{ url_for('admin.lead_reports_new') }}" class="admin-form lead-report-new-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+        <div class="field-group">
+          <span class="field-label field-label-block">Hub corpus for this run</span>
+          <select name="hub_report_organization_id" id="lr-hub-org" class="field-input">
+            {% for val, label in hub_choices_modal %}
+            <option value="{{ val }}" {% if val|string == (default_hub_organization_id|string if default_hub_organization_id else '') %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <p class="muted contextual-note">Blank uses the Hub corpus organization from <strong>Hub settings</strong> on this page.</p>
+        </div>
+
+        <fieldset class="field-group">
+          <legend class="field-label field-label-block">Subject</legend>
+          <label class="field-check-label"><input type="radio" name="subject_kind" value="person" checked class="field-check-input lr-sk"/> Person</label>
+          <label class="field-check-label"><input type="radio" name="subject_kind" value="organization" class="field-check-input lr-sk"/> Organization</label>
+          <label class="field-check-label"><input type="radio" name="subject_kind" value="place" class="field-check-input lr-sk"/> Place</label>
+        </fieldset>
+
+        <div class="field-group lr-wrap" id="lr-wrap-person">
+          <label class="field-label" for="lr-person">Person</label>
+          <select name="target_person_id" id="lr-person" class="field-input">
+            <option value="">—</option>
+            {% for p in people %}<option value="{{ p.id }}">{{ p.display_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field-group lr-wrap" id="lr-wrap-organization" hidden style="display:none;">
+          <label class="field-label" for="lr-org">Organization</label>
+          <select name="target_organization_id" id="lr-org" class="field-input">
+            <option value="">—</option>
+            {% for o in organizations %}<option value="{{ o.id }}">{{ o.display_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field-group lr-wrap" id="lr-wrap-place" hidden style="display:none;">
+          <label class="field-label" for="lr-place">Place</label>
+          <select name="target_place_id" id="lr-place" class="field-input">
+            <option value="">—</option>
+            {% for pl in places %}<option value="{{ pl.id }}">{{ pl.place_name or pl.display_name }}</option>{% endfor %}
+          </select>
+        </div>
+
+        <div class="form-submit-row form-submit-row--lead-report-modal">
+          <button type="button" class="disapprove-btn" data-lead-report-dialog-close>Cancel</button>
+          <button type="submit" class="primary-btn">Queue report</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<div class="leads-report-logs">
+  {% set logs = report_logs %}
+  {% set heading_h2 = "Recent lead report logs" %}
+  {% set log_empty_message = "No lead report jobs logged yet." %}
   {% include "admin/includes/poll_logs_list.html" %}
 </div>
 
-<div class="list-controls list-controls--leads">
-  <form method="get" class="filter-form filter-form--inline">
-    <label>Status
-      <select name="status" onchange="this.form.submit()">
-        <option value="">(all)</option>
-        {% for st in ('new','starred','done','archived') %}
-          <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>Entity
-      <select name="entity_id" onchange="this.form.submit()">
-        <option value="">(any)</option>
-        {% for e in entities %}
-          <option value="{{ e.id }}" {% if entity_filter == e.id %}selected{% endif %}>{{ e.display_name }} ({{ e.slug }})</option>
-        {% endfor %}
-      </select>
-    </label>
-  </form>
-  <div class="list-controls-trailing">
-    <div class="list-controls-bulk">
-      <form id="leads-bulk-form" method="post" action="{{ url_for('admin.leads_delete_bulk', **request.args.to_dict(flat=True)) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      </form>
-      <button type="submit" form="leads-bulk-form" class="disapprove-btn list-controls-bulk-btn" onclick="return confirm('Delete the selected leads? This cannot be undone.');">Delete selected</button>
-    </div>
-    <div class="list-controls-actions">
-      <a class="primary-btn-inline"
-         href="{% if status_filter or entity_filter is not none %}{{ url_for('admin.leads_export_csv') }}?{% if status_filter %}status={{ status_filter|urlencode }}{% endif %}{% if status_filter and entity_filter is not none %}&{% endif %}{% if entity_filter is not none %}entity_id={{ entity_filter }}{% endif %}{% else %}{{ url_for('admin.leads_export_csv') }}{% endif %}">Export CSV</a>
-    </div>
-  </div>
-</div>
-
-<table class="tbl tbl-compact leads-leads-table">
+<h2 class="source-view-h2" id="lead-reports-section">Reports</h2>
+<form method="get" class="filter-form filter-form--inline list-controls--reports" action="{{ url_for('admin.leads_list') }}">
+  <label>Filter
+    <select name="report_review" onchange="this.form.submit()">
+      <option value="" {% if not report_review_filter %}selected{% endif %}>All</option>
+      <option value="unreviewed" {% if report_review_filter == 'unreviewed' %}selected{% endif %}>Unreviewed only</option>
+      <option value="reviewed" {% if report_review_filter == 'reviewed' %}selected{% endif %}>Reviewed only</option>
+    </select>
+  </label>
+</form>
+<table class="tbl tbl-compact leads-reports-table">
   <thead>
     <tr>
-      <th class="tbl-col-check" scope="col"><span class="sr-only">Select</span><input type="checkbox" id="leads-select-all" form="leads-bulk-form" title="Select all on page" aria-label="Select all leads on this page"/></th>
-      <th>ID</th><th>Created</th><th>Status</th><th>Entity</th><th>Headline</th><th>Model</th><th class="tbl-actions-col"></th>
+      <th>ID</th><th>Subject</th><th>Hub org</th><th>Created</th><th>Status</th><th>Reviewed</th><th class="tbl-actions-col"></th>
     </tr>
   </thead>
   <tbody>
-  {% for lead in rows %}
+    {% for r in report_rows %}
     <tr>
-      <td class="tbl-col-check">
-        <input type="checkbox" name="lead_ids" value="{{ lead.id }}" form="leads-bulk-form" aria-label="Select lead {{ lead.id }}"/>
+      <td>{{ r.id }}</td>
+      <td class="muted">
+        {% if r.target_person %}person · {{ r.target_person.display_name }}
+        {% elif r.target_organization %}org · {{ r.target_organization.display_name }}
+        {% elif r.target_place %}place · {{ r.target_place.place_name or r.target_place.display_name }}
+        {% else %}—{% endif %}
       </td>
-      <td>{{ lead.id }}</td>
-      <td>{{ lead.created_at.strftime('%Y-%m-%d') }}</td>
-      <td>{{ lead.status }}</td>
-      <td class="muted">{% if lead.entity %}{{ lead.entity.slug }}{% else %}—{% endif %}</td>
-      <td>{{ lead.headline[:120] }}{% if lead.headline|length > 120 %}…{% endif %}</td>
-      <td>{{ lead.model_used or '—' }}</td>
+      <td class="muted">{{ r.hub_organization.display_name if r.hub_organization else '(from settings)' }}</td>
+      <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>{{ r.status }}</td>
+      <td>{% if r.reviewed_at %}{{ r.reviewed_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}</td>
       <td class="tbl-actions">
-        <div class="tbl-actions-inner">
-          <a href="{{ url_for('admin.leads_edit', lid=lead.id) }}">Edit</a>
-          <form method="post" action="{{ url_for('admin.leads_delete', lid=lead.id, **request.args.to_dict(flat=True)) }}" class="inline-form" onsubmit="return confirm('Delete lead {{ lead.id }}?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <button type="submit" class="linkish-danger">Delete</button>
-          </form>
-        </div>
+        <a href="{{ url_for('admin.lead_reports_view', rid=r.id) }}">View</a>
+        {% if not r.reviewed_at %}
+        <form method="post" action="{{ url_for('admin.lead_reports_review', rid=r.id) }}" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="linkish">Mark reviewed</button>
+        </form>
+        {% endif %}
       </td>
     </tr>
-  {% else %}
-    <tr><td colspan="8" class="tbl-empty">No leads match this filter.</td></tr>
-  {% endfor %}
+    {% else %}
+    <tr><td colspan="7" class="tbl-empty muted">No reports yet — use <strong>New Report</strong>.</td></tr>
+    {% endfor %}
   </tbody>
 </table>
+
+<p class="admin-form-foot"><a href="{{ url_for('admin.dashboard') }}" class="back-link">&larr; Dashboard</a></p>
+
 <script>
 (function () {
-  var all = document.getElementById("leads-select-all");
-  if (!all) return;
-  var form = document.getElementById("leads-bulk-form");
-  if (!form) return;
-  all.addEventListener("change", function () {
-    var on = all.checked;
-    document.querySelectorAll('input[form="leads-bulk-form"][name="lead_ids"][type="checkbox"]').forEach(function (cb) {
-      cb.checked = on;
+  function wireBackdropClose(dlg, closeSelector) {
+    if (!dlg) return;
+    dlg.addEventListener("click", function (ev) {
+      if (ev.target === dlg && dlg.close) dlg.close();
+    });
+    dlg.querySelectorAll(closeSelector).forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (dlg.close) dlg.close();
+      });
+    });
+  }
+  var hubDlg = document.getElementById("leads-pipeline-dialog");
+  wireBackdropClose(hubDlg, "[data-leads-pipeline-dialog-close]");
+  document.querySelectorAll("[data-leads-pipeline-dialog-open]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (hubDlg && hubDlg.showModal) hubDlg.showModal();
     });
   });
-})();
 
-(function () {
-  var dlg = document.getElementById("leads-pipeline-dialog");
-  if (!dlg) return;
-  function openDlg() {
-    if (dlg.showModal) dlg.showModal();
+  var reportDlg = document.getElementById("lead-report-new-dialog");
+  wireBackdropClose(reportDlg, "[data-lead-report-dialog-close]");
+  function openReportDlg() {
+    if (reportDlg && reportDlg.showModal) reportDlg.showModal();
   }
-  function closeDlg() {
-    if (dlg.close) dlg.close();
+  document.querySelectorAll("[data-lead-report-dialog-open]").forEach(function (btn) {
+    btn.addEventListener("click", openReportDlg);
+  });
+  {% if open_report_modal %}
+  openReportDlg();
+  {% endif %}
+
+  (function lrSubjectRadios() {
+    function sync() {
+      var k = "person";
+      document.querySelectorAll(".lr-sk").forEach(function (r) {
+        if (r.checked) k = r.value;
+      });
+      [["person","lr-wrap-person"],["organization","lr-wrap-organization"],["place","lr-wrap-place"]].forEach(function (pair) {
+        var el = document.getElementById(pair[1]);
+        if (!el) return;
+        var show = pair[0] === k;
+        el.hidden = !show;
+        el.style.display = show ? "" : "none";
+      });
+    }
+    document.querySelectorAll(".lr-sk").forEach(function (r) {
+      r.addEventListener("change", sync);
+    });
+    sync();
+  })();
+
+  var banner = document.getElementById("lead-report-run-banner");
+  var pollUrl = banner && banner.getAttribute("data-poll-report-status");
+  function poll() {
+    if (!pollUrl) return;
+    fetch(pollUrl, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        var phaseEl = banner.querySelector(".lead-report-phase-text");
+        if (!d.busy) {
+          window.location.reload();
+          return;
+        }
+        if (phaseEl && d.phase) phaseEl.textContent = d.phase;
+        setTimeout(poll, 2000);
+      })
+      .catch(function () {
+        setTimeout(poll, 4000);
+      });
   }
-  document.querySelectorAll("[data-leads-pipeline-dialog-open]").forEach(function (btn) {
-    btn.addEventListener("click", openDlg);
-  });
-  document.querySelectorAll("[data-leads-pipeline-dialog-close]").forEach(function (btn) {
-    btn.addEventListener("click", closeDlg);
-  });
-  dlg.addEventListener("click", function (ev) {
-    if (ev.target === dlg) closeDlg();
-  });
+  if (pollUrl) setTimeout(poll, 2000);
 })();
 </script>
 {% endblock %}

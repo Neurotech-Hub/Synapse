@@ -58,9 +58,7 @@ def start_background_poll(app: Flask) -> tuple[str | None, str]:
             {
                 "id": s.id,
                 "url": s.url,
-                "label": s.label or "",
                 "kind": s.kind,
-                "lead_source": bool(getattr(s, "lead_source", False)),
             }
             for s in sources
         ]

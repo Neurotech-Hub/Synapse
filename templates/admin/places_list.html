@@ -1,0 +1,39 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}Places{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Places</h1>
+  <div class="page-head-actions">
+    <a href="{{ url_for('admin.places_new') }}" class="primary-btn-inline">New place</a>
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_places_list.html" %}{% endcall %}
+  </div>
+</header>
+<table class="tbl tbl-compact">
+  <thead>
+    <tr>
+      <th>Slug</th><th>Name</th><th>Lat / Lng</th><th>Organizations</th><th>Rollup</th><th class="tbl-actions-col"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for pl in rows %}
+    <tr>
+      <td class="mono">{{ pl.slug }}</td>
+      <td>{{ pl.place_name }}</td>
+      <td class="mono muted">{{ "%.4f"|format(pl.latitude) }}, {{ "%.4f"|format(pl.longitude) }}</td>
+      <td class="muted">
+        {% set porgs = (pl.organizations or []) %}
+        {% if porgs %}
+          {% for o in porgs %}
+            <span class="cell-multi-chip"><a href="{{ url_for('admin.organizations_edit', oid=o.id) }}">{{ o.display_name }}</a>{% if not loop.last %}<span aria-hidden="true">,</span>{% endif %}</span>{% endfor %}
+        {% else %}—{% endif %}
+      </td>
+      <td>{% if pl.persona and pl.persona.build_status == 'ok' %}<span class="badge badge-active">ok</span>{% else %}<span class="muted">{{ pl.persona.build_status if pl.persona else '—' }}</span>{% endif %}</td>
+      <td class="tbl-actions"><a href="{{ url_for('admin.places_view', plid=pl.id) }}">View</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="tbl-empty muted">No places.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

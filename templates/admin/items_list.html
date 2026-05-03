@@ -5,7 +5,18 @@
 {% block body %}
 <header class="page-head">
   <h1>Content items</h1>
-  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_items_list.html" %}{% endcall %}
+  <div class="page-head-actions">
+    <form
+      id="items-refresh-html-form"
+      method="post"
+      action="{{ items_refresh_action }}"
+      class="inline-form"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" id="items-refresh-html-submit" class="primary-btn-inline">Refresh all HTML content</button>
+    </form>
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_items_list.html" %}{% endcall %}
+  </div>
 </header>
 <div class="list-controls">
   <form method="get" class="filter-form">
@@ -13,39 +24,39 @@
       <select name="source_id" onchange="this.form.submit()">
         <option value="">(all)</option>
         {% for s in sources %}
-          <option value="{{ s.id }}" {% if source_filter == s.id %}selected{% endif %}>{{ s.label or s.url }}</option>
+          <option value="{{ s.id }}" {% if source_filter == s.id %}selected{% endif %}>{{ s.url }}</option>
         {% endfor %}
       </select>
     </label>
   </form>
 </div>
 
-<table class="tbl tbl-compact">
+<table class="tbl tbl-compact tbl-items-one-line">
   <thead>
-    <tr><th>ID</th><th>Source</th><th>Seen</th><th>Title</th><th>Ext. ID</th><th class="tbl-actions-col"></th></tr>
+    <tr><th>ID</th><th>Source</th><th class="nowrap">Seen</th><th>Title</th><th>Ext. ID</th><th class="tbl-actions-col"></th></tr>
   </thead>
   <tbody>
   {% for it in rows %}
     {% set src = it.source %}
     <tr>
       <td>{{ it.id }}</td>
-      <td class="cell-source-tie nowrap">
+      <td class="cell-source-tie tbl-items-cell-clip">
         <a href="{{ url_for('admin.sources_view', sid=it.source_id) }}" class="mono tiny" title="{{ src.url if src else '' }}">{{ it.source_id }}</a>
         <span class="source-tie-meta">
           {% if src %}
-          · {% if src.label %}{{ src.label }}{% else %}<span class="cell-url tbl-url-truncate" title="{{ src.url }}">{{ src.url[:src_url_max] }}{% if src.url|length > src_url_max %}…{% endif %}</span>{% endif %}
+          · <span class="tbl-url-truncate tbl-items-source-url" title="{{ src.url }}">{{ src.url[:src_url_max] }}{% if src.url|length > src_url_max %}…{% endif %}</span>
           {% else %}
           · <span class="muted">?</span>
           {% endif %}
         </span>
       </td>
-      <td>{{ it.first_seen_at.strftime('%Y-%m-%d') }}</td>
-      <td>{{ (it.title or '—')[:80] }}</td>
+      <td class="nowrap">{{ it.first_seen_at.strftime('%Y-%m-%d') }}</td>
+      <td class="tbl-items-title-cell"><span title="{{ it.title or '' }}">{{ (it.title or '—')[:180] }}</span></td>
       {% set ext = it.external_id %}
-      <td class="mono tiny tbl-ext-id-cell" title="{{ ext }}">{% if ext|length > 14 %}{{ ext[:12] }}…{% else %}{{ ext }}{% endif %}</td>
+      <td class="mono tiny tbl-ext-id-cell tbl-items-ext-cell" title="{{ ext }}">{{ ext }}</td>
       <td class="tbl-actions">
         <div class="tbl-actions-inner">
-          <a href="{{ url_for('admin.items_edit', iid=it.id) }}">Edit</a>
+          <a href="{{ url_for('admin.items_edit', iid=it.id) }}">View</a>
         </div>
       </td>
     </tr>
@@ -54,4 +65,26 @@
   {% endfor %}
   </tbody>
 </table>
+<script>
+(function () {
+  var form = document.getElementById("items-refresh-html-form");
+  if (!form) return;
+  form.addEventListener("submit", function (ev) {
+    if (
+      !window.confirm(
+        "Re-fetch every HTML page source and regenerate title/snippet using current ingest and Ollama settings? This can take a while and does not add snapshot rows."
+      )
+    ) {
+      ev.preventDefault();
+      return;
+    }
+    var btn = document.getElementById("items-refresh-html-submit");
+    if (btn) {
+      btn.disabled = true;
+      btn.setAttribute("aria-busy", "true");
+      btn.textContent = "Refreshing…";
+    }
+  });
+})();
+</script>
 {% endblock %}

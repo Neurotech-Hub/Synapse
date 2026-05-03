@@ -1,12 +1,13 @@
 """Lightweight HTTP tests (in-memory SQLite)."""
 
 import os
+from unittest.mock import patch
 
 import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import ContentItem, LeadCandidate, PollLog, Source
+from app.models import PollLog, Source
 
 pytestmark = pytest.mark.usefixtures("_admin_env")
 
@@ -45,7 +46,11 @@ def test_public_home(client):
 
 
 def test_public_submit_and_duplicate(app, client):
-    r1 = client.post("/", data={"url": "https://example.edu/lab", "submit": "Add"}, follow_redirects=True)
+    r1 = client.post(
+        "/",
+        data={"url": "https://example.edu/lab", "ownership_intent": "organization", "submit": "Add"},
+        follow_redirects=True,
+    )
     assert r1.status_code == 200
 
     with app.app_context():
@@ -53,6 +58,7 @@ def test_public_submit_and_duplicate(app, client):
         assert row is not None
         assert row.pending is True
         assert row.enabled is True
+        assert row.ownership_hint == "organization"
 
     r2 = client.post("/", data={"url": "https://example.edu/lab", "submit": "Add"})
     assert r2.status_code == 200
@@ -65,7 +71,6 @@ def test_admin_sources_view_ok(app, client):
             Source(
                 url="https://example.net/feed.xml",
                 kind="rss_feed",
-                label="Test feed",
                 enabled=True,
                 pending=False,
             )
@@ -85,14 +90,47 @@ def test_admin_sources_view_ok(app, client):
     assert b"Content items" in r.data
 
 
-def test_admin_snapshots_legacy_redirect_hashes_fragment(app, client):
-    """Old /snapshots URL lands on unified source view (#snapshots in Location)."""
+def test_sources_list_shows_label_after_save(app, client):
+    with app.app_context():
+        db.session.add(
+            Source(
+                url="https://label-test.example/w",
+                kind="html_page",
+                enabled=True,
+                pending=False,
+            )
+        )
+        db.session.commit()
+        sid = Source.query.filter_by(url="https://label-test.example/w").first().id
+
+    client.post(
+        "/admin/login",
+        data={"password": "test-pass", "submit": "Sign in"},
+        follow_redirects=True,
+    )
+    client.post(
+        f"/admin/sources/{sid}",
+        data={
+            "url": "https://label-test.example/w",
+            "label": "Winter lab news",
+            "kind": "html_page",
+            "hide_from_polling": "",
+            "submit": "Save",
+        },
+        follow_redirects=True,
+    )
+    r = client.get("/admin/sources")
+    assert r.status_code == 200
+    assert b"Winter lab news" in r.data
+
+
+def test_admin_sources_snapshots_page(app, client):
+    """Dedicated snapshots listing for one source."""
     with app.app_context():
         db.session.add(
             Source(
                 url="https://example.org/page",
                 kind="html_page",
-                label=None,
                 enabled=True,
                 pending=False,
             )
@@ -106,8 +144,9 @@ def test_admin_snapshots_legacy_redirect_hashes_fragment(app, client):
         follow_redirects=True,
     )
     r = client.get(f"/admin/sources/{sid}/snapshots", follow_redirects=False)
-    assert r.status_code == 302
-    assert f"/admin/sources/{sid}#snapshots" in r.headers.get("Location", "")
+    assert r.status_code == 200
+    assert b"Snapshots" in r.data
+    assert str(sid).encode() in r.data
 
 
 def test_admin_sources_edit_legacy_redirect(app, client):
@@ -116,7 +155,6 @@ def test_admin_sources_edit_legacy_redirect(app, client):
             Source(
                 url="https://example.invalid/x",
                 kind="html_page",
-                label=None,
                 enabled=True,
                 pending=False,
             )
@@ -140,7 +178,6 @@ def test_admin_source_disapprove(app, client):
             Source(
                 url="https://example.org/tracked",
                 kind="html_page",
-                label=None,
                 enabled=True,
                 pending=False,
             )
@@ -189,6 +226,61 @@ def test_dashboard_lists_pending_public_source(client):
     assert r.status_code == 200
     assert b"Sources awaiting approval" in r.data
     assert b"pending.example.edu" in r.data
+    assert b"View to assign" in r.data
+
+
+def test_content_items_list_shows_bulk_html_refresh(client):
+    client.post(
+        "/admin/login",
+        data={"password": "test-pass", "submit": "Sign in"},
+        follow_redirects=True,
+    )
+    r = client.get("/admin/items")
+    assert r.status_code == 200
+    assert b"Refresh all HTML content" in r.data
+
+
+def test_items_refresh_all_html_snippets_no_html_sources(client):
+    client.post(
+        "/admin/login",
+        data={"password": "test-pass", "submit": "Sign in"},
+        follow_redirects=True,
+    )
+    with patch("app.web.admin.routes.refresh_html_page_content_items") as mock_batch:
+        r = client.post("/admin/items/refresh-all-html-snippets", follow_redirects=True)
+        mock_batch.assert_not_called()
+    assert r.status_code == 200
+    assert b"No HTML page sources" in r.data
+
+
+def test_items_refresh_all_html_snippets_batches(app, client):
+    with app.app_context():
+        db.session.add(
+            Source(
+                url="https://bulk-refresh.example/page",
+                kind="html_page",
+                enabled=True,
+                pending=False,
+            )
+        )
+        db.session.commit()
+        sid = Source.query.filter_by(url="https://bulk-refresh.example/page").first().id
+
+    client.post(
+        "/admin/login",
+        data={"password": "test-pass", "submit": "Sign in"},
+        follow_redirects=True,
+    )
+    with patch("app.web.admin.routes.refresh_html_page_content_items") as mock_batch:
+        mock_batch.return_value = [{"status": "updated", "source_id": sid}]
+        r = client.post(
+            f"/admin/items/refresh-all-html-snippets?source_id={sid}",
+            follow_redirects=True,
+        )
+        mock_batch.assert_called_once()
+        assert list(mock_batch.call_args[0][0]) == [sid]
+    assert r.status_code == 200
+    assert b"Ran HTML re-fetch" in r.data
 
 
 def test_leads_page_has_pipeline_settings(client):
@@ -199,86 +291,22 @@ def test_leads_page_has_pipeline_settings(client):
     )
     r = client.get("/admin/leads")
     assert r.status_code == 200
-    assert b"Lead pipeline" in r.data
-    assert b"Save pipeline settings" in r.data
-    assert b"Recent qualification logs" in r.data
+    assert b"Hub settings" in r.data
+    assert b"Save Hub settings" in r.data
+    assert b"Recent lead report logs" in r.data
 
 
-def test_leads_bulk_delete(app, client):
-    with app.app_context():
-        db.session.add(
-            Source(
-                url="https://leads-bulk.example.edu/feed",
-                kind="rss_feed",
-                label="Bulk test",
-                enabled=True,
-                pending=False,
-            )
-        )
-        db.session.commit()
-        sid = Source.query.filter_by(url="https://leads-bulk.example.edu/feed").first().id
-        db.session.add(
-            ContentItem(
-                source_id=sid,
-                external_id="item-a",
-                title="A",
-                link="https://example.edu/a",
-            )
-        )
-        db.session.add(
-            ContentItem(
-                source_id=sid,
-                external_id="item-b",
-                title="B",
-                link="https://example.edu/b",
-            )
-        )
-        db.session.commit()
-        ci_a = ContentItem.query.filter_by(external_id="item-a").first()
-        ci_b = ContentItem.query.filter_by(external_id="item-b").first()
-        db.session.add(
-            LeadCandidate(
-                candidate_content_item_id=ci_a.id,
-                hub_context_hash="a" * 64,
-                prompt_version="1",
-                headline="Lead A",
-            )
-        )
-        db.session.add(
-            LeadCandidate(
-                candidate_content_item_id=ci_b.id,
-                hub_context_hash="b" * 64,
-                prompt_version="1",
-                headline="Lead B",
-            )
-        )
-        db.session.commit()
-        id_a = LeadCandidate.query.filter_by(headline="Lead A").first().id
-        id_b = LeadCandidate.query.filter_by(headline="Lead B").first().id
-
-    client.post(
-        "/admin/login",
-        data={"password": "test-pass", "submit": "Sign in"},
-        follow_redirects=True,
-    )
-    r = client.post(
-        "/admin/leads/delete-bulk",
-        data={"lead_ids": [str(id_a), str(id_b)]},
-        follow_redirects=True,
-    )
-    assert r.status_code == 200
-    with app.app_context():
-        assert LeadCandidate.query.count() == 0
-
-    r2 = client.get("/admin/leads")
-    assert r2.status_code == 200
-
-
-def test_dashboard_filters_lead_qual_poll_logs(app, client):
+def test_dashboard_filters_lead_job_poll_logs(app, client):
     with app.app_context():
         db.session.add(
             PollLog(
                 detail="[lead-qual] UNIQUE_QUAL_LOG_SNIP_991",
+                ok=True,
+            )
+        )
+        db.session.add(
+            PollLog(
+                detail="[lead-report] UNIQUE_REPORT_LOG_SNIP_774",
                 ok=True,
             )
         )
@@ -299,10 +327,12 @@ def test_dashboard_filters_lead_qual_poll_logs(app, client):
     assert r.status_code == 200
     assert b"UNIQUE_INGEST_LOG_SNIP_882" in r.data
     assert b"UNIQUE_QUAL_LOG_SNIP_991" not in r.data
+    assert b"UNIQUE_REPORT_LOG_SNIP_774" not in r.data
 
     r_leads = client.get("/admin/leads")
     assert r_leads.status_code == 200
-    assert b"UNIQUE_QUAL_LOG_SNIP_991" in r_leads.data
+    assert b"UNIQUE_REPORT_LOG_SNIP_774" in r_leads.data
+    assert b"UNIQUE_QUAL_LOG_SNIP_991" not in r_leads.data
 
 
 def test_admin_sidebar_sources_nested_nav(client):

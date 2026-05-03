@@ -34,7 +34,7 @@
 
         <form method="post" class="composer-form" novalidate>
           {{ form.hidden_tag() }}
-          <div class="composer-row">
+          <div class="composer-row composer-row--fields">
             {{ form.url(
               class_="composer-input",
               placeholder="Paste a lab site, RSS page, anything https…",
@@ -43,6 +43,12 @@
               **({"aria-invalid": "true", "aria-describedby": "composer-errors"} if form.url.errors else {})
             ) }}
             {{ form.submit(class_="composer-submit") }}
+          </div>
+          <div class="composer-row composer-row--meta">
+            <label class="composer-intent-label">
+              <span class="composer-intent-caption">This link is mainly</span>
+              {{ form.ownership_intent(class_="composer-intent-select") }}
+            </label>
           </div>
           {% if form.url.errors %}
             <div id="composer-errors" class="composer-error-wrap">

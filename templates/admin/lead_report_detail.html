@@ -1,0 +1,92 @@
+{% extends "admin/base.html" %}
+{% block title %}Lead report #{{ report.id }}{% endblock %}
+{% block body %}
+<header class="page-head page-head--compact">
+  <h1>Lead report #{{ report.id }}</h1>
+</header>
+<p class="muted contextual-note">{{ subject_label }} · status <strong>{{ report.status }}</strong>
+  · created {{ report.created_at.strftime('%Y-%m-%d %H:%M UTC') }}
+  {% if report.completed_at %}· completed {{ report.completed_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}
+  · Hub {% if report.hub_organization %}{{ report.hub_organization.display_name }}{% else %}(from settings at run time){% endif %}
+</p>
+
+{% if report.error_detail %}
+<section class="review-banner review-banner--approve" aria-label="Error">
+  <p class="review-banner-text">{{ report.error_detail }}</p>
+</section>
+{% endif %}
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Executive summary</h2>
+  <div class="lead-report-prose">{{ report.executive_summary or '—' }}</div>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Collaboration routes</h2>
+  {% if collaboration_routes %}
+  <ol class="lead-report-route-list">
+    {% for route in collaboration_routes %}
+    <li>
+      <strong>{{ route.title or 'Route' }}</strong>
+      <p class="lead-report-prose">{{ route.why or '' }}</p>
+      {% if route.next_step %}<p class="muted"><strong>Next:</strong> {{ route.next_step }}</p>{% endif %}
+      {% if route.hub_evidence_refs %}<p class="muted mono">Hub CONTENT_ITEM_IDs: {{ route.hub_evidence_refs | join(', ') }}</p>{% endif %}
+      {% if route.target_evidence_refs %}<p class="muted mono">Target CONTENT_ITEM_IDs: {{ route.target_evidence_refs | join(', ') }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="muted">None recorded yet (run may have failed or produced an empty list).</p>
+  {% endif %}
+</section>
+
+{% if ranked_contacts %}
+<section class="source-view-section">
+  <h2 class="source-view-h2">Ranked contacts</h2>
+  <ol class="lead-report-route-list">
+    {% for c in ranked_contacts %}
+    <li>
+      <strong>Person #{{ c.person_id }}</strong> · score {{ c.score }}
+      <p class="lead-report-prose">{{ c.why or '' }}</p>
+      {% if c.opener %}<p class="muted"><strong>Opener:</strong> {{ c.opener }}</p>{% endif %}
+      <p><a href="{{ url_for('admin.people_edit', pid=c.person_id) }}">Open person &rarr;</a></p>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Review</h2>
+  {% if report.reviewed_at %}
+  <p>Marked reviewed {{ report.reviewed_at.strftime('%Y-%m-%d %H:%M UTC') }}{% if report.review_notes %} — {{ report.review_notes }}{% endif %}</p>
+  <form method="post" action="{{ url_for('admin.lead_reports_review', rid=report.id) }}" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <input type="hidden" name="clear_reviewed" value="1"/>
+    <button type="submit" class="disapprove-btn">Clear reviewed</button>
+  </form>
+  {% else %}
+  <form method="post" action="{{ url_for('admin.lead_reports_review', rid=report.id) }}" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <div class="field-group">
+      <label class="field-label" for="review_notes">Notes (optional)</label>
+      <textarea name="review_notes" id="review_notes" class="field-input" rows="3"></textarea>
+    </div>
+    <button type="submit" class="primary-btn">Mark as reviewed</button>
+  </form>
+  {% endif %}
+</section>
+
+<div class="form-submit-row">
+  <form method="post" action="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" onsubmit="return confirm('Delete lead report {{ report.id }}?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="danger-btn">Delete report</button>
+  </form>
+  <a href="{{ url_for('admin.leads_list') }}#lead-reports-section" class="back-link">&larr; Back to Leads</a>
+</div>
+
+<style>
+.lead-report-prose { white-space: pre-wrap; line-height: 1.45; }
+.lead-report-route-list li { margin-bottom: 1.25rem; }
+</style>
+{% endblock %}

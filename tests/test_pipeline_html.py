@@ -64,7 +64,6 @@ def test_html_page_poll_creates_snapshot_and_content_item(app):
             Source(
                 url="https://example.invalid/lab-news",
                 kind="html_page",
-                label=None,
                 enabled=True,
                 pending=False,
             )
@@ -100,7 +99,6 @@ def test_html_page_duplicate_hash_no_second_content(app):
             Source(
                 url="https://example.invalid/static",
                 kind="html_page",
-                label=None,
                 enabled=True,
                 pending=False,
             )

@@ -1,0 +1,48 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}Organizations{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Organizations</h1>
+  <div class="page-head-actions">
+    <a href="{{ url_for('admin.organizations_new') }}" class="primary-btn-inline">New organization</a>
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_entities_list.html" %}{% endcall %}
+  </div>
+</header>
+<table class="tbl tbl-compact">
+  <thead>
+    <tr>
+      <th>Slug</th><th>Name</th>
+      <th scope="col" class="tbl-col-center">People</th>
+      <th scope="col" class="tbl-col-center">Places</th>
+      <th scope="col" class="tbl-col-center">Org-owned sources</th>
+      <th scope="col" class="tbl-hub-mark-col">Hub corpus</th>
+      <th scope="col" class="tbl-col-center">Collab (rollup)</th><th class="tbl-actions-col"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for o in rows %}
+    <tr>
+      <td class="mono">{{ o.slug }}</td>
+      <td>{{ o.display_name }}</td>
+      <td class="tbl-col-center">{{ people_counts.get(o.id, 0) }}</td>
+      <td class="tbl-col-center">{{ places_counts.get(o.id, 0) }}</td>
+      <td class="tbl-col-center">{{ org_owned_source_counts.get(o.id, 0) }}</td>
+      <td class="tbl-hub-mark-col">
+        {% if hub_organization_id is not none and o.id == hub_organization_id %}
+        <span class="hub-corpus-mark hub-corpus-mark--designated" role="img" title="Designated Hub corpus organization">✓</span>
+        {% elif hub_organization_id is not none and o.id in hub_corpus_organization_ids %}
+        <span class="hub-corpus-mark" role="img" title="Owns Hub-corpus source">✓</span>
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
+      </td>
+      <td class="tbl-col-center">{% if o.persona and o.persona.collab_openness_score is not none %}{{ o.persona.collab_openness_score | round(2) }}{% else %}—{% endif %}</td>
+      <td class="tbl-actions"><a href="{{ url_for('admin.organizations_edit', oid=o.id) }}">Edit</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="tbl-empty muted">No organizations.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

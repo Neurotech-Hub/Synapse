@@ -1,0 +1,49 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}People{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>People</h1>
+  <div class="page-head-actions">
+    <a href="{{ url_for('admin.people_new') }}" class="primary-btn-inline">New person</a>
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_entities_list.html" %}{% endcall %}
+  </div>
+</header>
+<table class="tbl tbl-compact">
+  <thead>
+    <tr>
+      <th>Slug</th><th>Name</th><th>Organizations</th>
+      <th scope="col" class="tbl-col-center">Sources</th>
+      <th scope="col" class="tbl-hub-mark-col" title="Owns a Hub-corpus source">Hub corpus</th>
+      <th scope="col" class="tbl-col-center">Collab score</th><th class="tbl-actions-col"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for p in rows %}
+    <tr>
+      <td class="mono">{{ p.slug }}</td>
+      <td>{{ p.display_name }}</td>
+      <td class="muted">
+        {% set orgs_list = (p.organizations or []) %}
+        {% if orgs_list %}
+          {% for o in orgs_list %}
+            <span class="cell-multi-chip"><a href="{{ url_for('admin.organizations_edit', oid=o.id) }}">{{ o.display_name }}</a>{% if not loop.last %}<span aria-hidden="true">,</span>{% endif %}</span>{% endfor %}
+        {% else %}—{% endif %}
+      </td>
+      <td class="tbl-col-center">{{ person_source_counts.get(p.id, 0) }}</td>
+      <td class="tbl-hub-mark-col">
+        {% if hub_organization_id is not none and p.id in hub_corpus_person_ids %}
+        <span class="hub-corpus-mark" role="img" title="Owns source in Hub corpus">✓</span>
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
+      </td>
+      <td class="tbl-col-center">{% if p.persona and p.persona.collab_openness_score is not none %}{{ p.persona.collab_openness_score | round(2) }}{% else %}—{% endif %}</td>
+      <td class="tbl-actions"><a href="{{ url_for('admin.people_edit', pid=p.id) }}">Edit</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="tbl-empty muted">No people.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

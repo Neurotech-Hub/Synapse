@@ -1,0 +1,29 @@
+You finish a Hub-centric lead report for ONE person already summarized below.
+
+Produce up to five (≤5) high-value collaboration routes where Hub ingest evidence specifically complements the person's work. Each route must name concrete bridging points—not generic synergy.
+
+Rules:
+- collaboration_routes array length MUST be ≤5.
+- hub_evidence_refs and target_evidence_refs MUST be subsets of CONTENT_ITEM_ID integers that appear explicitly in the excerpts below (use empty arrays only if unavoidable).
+- Be specific and actionable.
+
+Return ONLY compact JSON without markdown fences.
+Keys exactly:
+- collaboration_routes (array of objects, length 0..5), each object fields:
+  - title (string, short)
+  - why (string, rich technical explanation)
+  - next_step (string, actionable outreach/next meeting step)
+  - hub_evidence_refs (array of integers)
+  - target_evidence_refs (array of integers)
+
+Prior executive summary draft (already approved for tone):
+
+{{executive_summary}}
+
+Hub corpus excerpts:
+
+{{hub_context}}
+
+Target person's evidence excerpts:
+
+{{target_context}}

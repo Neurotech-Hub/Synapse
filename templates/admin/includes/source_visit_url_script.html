@@ -1,7 +1,11 @@
 <script>
 (function () {
-  var input = document.querySelector(".admin-form input[name=\"url\"]");
-  var link = document.getElementById("source-visit-link");
+  var rootSel = {{ (visit_url_root_selector or "")|tojson }};
+  var urlName = {{ (visit_url_field_name or "url")|tojson }};
+  var linkId = {{ (visit_link_id or "source-visit-link")|tojson }};
+  var root = rootSel ? document.querySelector(rootSel) : document;
+  var input = root.querySelector("input[name=" + JSON.stringify(urlName) + "]");
+  var link = document.getElementById(linkId);
   if (!input || !link) return;
   function isHttpUrl(v) {
     return /^https?:\/\//i.test((v || "").trim());

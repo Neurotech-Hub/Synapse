@@ -36,9 +36,9 @@ SYNAPSE_PORT=5002 flask --app wsgi run --debug --host 127.0.0.1 --port 5002
 | Surface | Address |
 |---------|---------|
 | Public | [http://127.0.0.1:5002/](http://127.0.0.1:5002/) — URL submit (canonicalized; duplicates reported) |
-| Admin | [http://127.0.0.1:5002/admin/](http://127.0.0.1:5002/admin/) — **Dashboard** (poll + pending public URLs + logs), **Leads** (pipeline settings + run qualification), sources, content items, snapshots |
+| Admin | [http://127.0.0.1:5002/admin/](http://127.0.0.1:5002/admin/) — **Dashboard** (poll + pending public URLs + logs), **Leads** (Hub corpus org + lead reports), sources, content items, snapshots |
 
-Lead pipeline toggles and numeric caps live on **Leads** (stored in the database). Optional **`SYNAPSE_LEADS_*`** environment variables still override defaults when the settings row is created automatically (see README table below). Per-source **Lead source (Hub)** is on each source’s **edit** form under Sources.
+The **Hub corpus organization** is chosen under **Leads → Hub settings**. Per-source **Neurotech Hub** tagging (and person/org owners) controls which ingests count as Hub evidence for reports. Report evidence caps and Ollama context are tunable via **`SYNAPSE_LEAD_REPORT_*`** (see table below).
 
 ---
 
@@ -82,19 +82,21 @@ After install, confirm `ollama` is on your PATH (e.g. `/opt/homebrew/bin/ollama`
 - **Full runbook** (curl checks, env, troubleshooting): [docs/ollama.md](docs/ollama.md)
 - **Quick shell check:** `./scripts/ollama_smoke.sh`
 
-**Ingest + lead qualification:**
+**Ingest + Hub lead reports (Ollama):**
 
 | Variable | Effect |
 |----------|--------|
 | `SYNAPSE_HTML_PAGE_LLM` | When set to `0` / `false` / `no` / `off`, new `html_page` snapshots use visible-text heuristics only (no Ollama call). **Default** when unset: try Ollama first, then fall back. |
-| `SYNAPSE_LEADS_INGEST` | **Deprecated.** Poll always creates **ContentItem** rows only; it does **not** create leads. Kept for compatibility with old notes. |
-| `SYNAPSE_LEADS_QUALIFY` | **Legacy bootstrap only.** When the settings row is auto-created (e.g. tests / first boot without migrations), this seeds “qualification enabled.” Prefer toggling **Lead pipeline** on the **Leads** admin page. |
-| `SYNAPSE_LEADS_PROMPT_VERSION` | Default for **prompt version** when the settings row is auto-created. Otherwise edit on **Leads**. |
-| `SYNAPSE_LEADS_MAX_HUB_ITEMS` | Default cap when the settings row is auto-created; otherwise edit on **Leads**. |
-| `SYNAPSE_LEADS_MAX_CANDIDATES_PER_RUN` | Same pattern — defaults for auto-created row. |
-| `SYNAPSE_LEADS_ENTITY_CATALOG_MAX` | Same pattern — defaults for auto-created row. |
+| `SYNAPSE_LEADS_INGEST` | **Deprecated.** Poll always creates **ContentItem** rows only. Kept for compatibility with old notes. |
+| `SYNAPSE_LEAD_REPORT_HUB_ITEMS_MAX` | Max Hub content items concatenated into report prompts (see `app/leads/lead_report_budgets.py`). |
+| `SYNAPSE_LEAD_REPORT_HUB_SNIPPET_CHARS` | Per-Hub-item snippet truncation (characters). |
+| `SYNAPSE_LEAD_REPORT_PERSON_ITEMS_MAX` | Cap on person-owned evidence items for a target. |
+| `SYNAPSE_LEAD_REPORT_PERSON_CONTENT_CHARS` | Total budget for concatenated owned-source evidence. |
+| `SYNAPSE_LEAD_REPORT_ORG_PEOPLE_MAX` | Max affiliated people enumerated for org/place rollups. |
+| `SYNAPSE_LEAD_REPORT_PIPELINE_SEMVER` | Bumps fingerprinting when prompt/evidence semantics change. |
+| `SYNAPSE_LEAD_REPORT_NUM_CTX` | Ollama `num_ctx` for report calls (see `app/ingest/ollama_client.py`). |
 
-**Workflow:** **Poll now** (Dashboard) ingests feeds into content items → tag **Tracked entities** and **Lead source** (Hub) in **Sources** → optional **Entities** CRUD → enable pipeline and **Run lead qualification** on **Leads**. Progress and errors append to **Recent poll logs** on the Dashboard as `[lead-qual]`.
+**Workflow:** **Poll now** (Dashboard) ingests feeds into content items → configure **Hub corpus organization** and tagging under **Sources** / **Leads** → queue **Hub lead reports** from **Leads**. Report jobs log as **`[lead-report]`** on the Leads page; the Dashboard hides `[lead-report]` and `[lead-qual]` lines from the main poll log strip.
 
 Html pages still get **ContentItem** rows on each new SHA-256 snapshot; Ollama shapes `title`/`snippet` when enabled.
 

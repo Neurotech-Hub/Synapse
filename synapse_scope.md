@@ -1,13 +1,13 @@
 # Connection Maker — Local MVP & Stack
 
-> An AI-assisted lead pipeline for the Neurotech Hub: **watch links → detect what’s new → turn it into actionable leads** you can triage locally.  
-> *Down the road the same ingestion + Postgres core can drive newsletters, collaborator hints, and funding pathways — but the first win is leads.*
+> An AI-assisted pipeline for the Neurotech Hub: **watch links → detect what’s new → synthesize Hub lead reports** you can review locally.  
+> *Down the road the same ingestion + Postgres core can drive newsletters, collaborator hints, and funding pathways — but the first win is structured reports.*
 
 ---
 
 ## What you’re building first
 
-**MVP outcome:** register sources (RSS + HTML monitors), run a **poll** that dedupes into `content_item` and optional Ollama-derived `lead_candidate` rows, and operate from a **dual-surface Flask app**: a **public** landing (URL submission with duplicate detection, rate-limited POSTs) and a **password-gated `/admin`** workspace for CRUD plus **Poll now**. Default local DB is **SQLite** under `instance/`; point **`DATABASE_URL`** at Postgres when you want parity with production. Migrations: **`flask --app wsgi db upgrade`**. See [README.md](README.md) for run commands and env vars.
+**MVP outcome:** register sources (RSS + HTML monitors), run a **poll** that dedupes into `content_item`, and **queue Hub lead reports** (`lead_report`) with Ollama when configured—all from a **dual-surface Flask app**: a **public** landing (URL submission with duplicate detection, rate-limited POSTs) and a **password-gated `/admin`** workspace for CRUD plus **Poll now**. Default local DB is **SQLite** under `instance/`; point **`DATABASE_URL`** at Postgres when you want parity with production. Migrations: **`flask --app wsgi db upgrade`**. See [README.md](README.md) for run commands and env vars.
 
 **Hosting posture**
 
@@ -46,8 +46,8 @@
 | 3 | Python venv + Flask + DB driver (`psycopg` or `asyncpg` + thin sync wrapper — your choice). |
 | 4 | One **ingestion** path: RSS poll → dedupe → insert rows. |
 | 5 | **Ollama** installed + one small instruct model pulled. |
-| 6 | Poll only writes `content_item` rows; **lead qualification** (admin **Leads** page: pipeline settings + **Run lead qualification**) compares Hub vs world slices + entity catalog (`prompts/qualified_lead.txt`) via Ollama and inserts **qualified** `lead_candidate` rows. |
-| 7 | **Admin**: **Entities**, **Tracked entities** per source (`source_entity`), leads list / filter (`status`, `entity_id`) / edit / delete + **Export CSV**. |
+| 6 | Poll only writes `content_item` rows; **Hub lead reports** (admin **Leads**) queue Ollama-backed **`lead_report`** jobs using Hub corpus evidence and report prompts (`prompts/lead_report_*.txt`). |
+| 7 | **Admin**: **Entities**, **Tracked entities** per source (`source_entity`), lead reports list / review / delete as implemented. |
 
 RSS is the shortest path on day one; `html_page` can be second (fetch URL, strip boilerplate or hash raw body, compare to last snapshot).
 

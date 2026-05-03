@@ -1,0 +1,277 @@
+{# Entity edit: searchable source tags (inverse of source_entity_picker). Expects source_picker_bootstrap dict #}
+<script type="application/json" id="entity-side-source-picker-bootstrap">{{ source_picker_bootstrap | tojson }}</script>
+
+<div class="entity-picker entity-side-source-picker-root" id="entity-side-source-picker">
+  <div id="entity-side-source-picker-chips" class="entity-picker-chips" role="group" aria-label="Linked sources"></div>
+  <div id="entity-side-source-picker-hidden-inputs">
+    {% for sid in selected_source_ids %}
+    <input type="hidden" name="source_ids" value="{{ sid }}" data-initial-source-tag="1"/>
+    {% endfor %}
+  </div>
+  <label class="field-label" for="entity-side-source-picker-search">Add source</label>
+  <div class="entity-picker-combobox">
+    <input
+      type="text"
+      id="entity-side-source-picker-search"
+      class="field-input entity-picker-search-input"
+      placeholder="Search by label, URL, kind…"
+      autocomplete="off"
+      role="combobox"
+      aria-autocomplete="list"
+      aria-expanded="false"
+      aria-controls="entity-side-source-picker-listbox"
+    />
+    <ul class="entity-picker-dropdown" id="entity-side-source-picker-listbox" role="listbox" aria-label="Source matches" hidden></ul>
+  </div>
+</div>
+
+<script>
+(function () {
+  var bootEl = document.getElementById("entity-side-source-picker-bootstrap");
+  var root = document.getElementById("entity-side-source-picker");
+  if (!bootEl || !root) return;
+  var BOOT;
+  try {
+    BOOT = JSON.parse(bootEl.textContent || "{}");
+  } catch (e) {
+    return;
+  }
+  var OPTIONS = Array.isArray(BOOT.options) ? BOOT.options : [];
+  if (!OPTIONS.length) return;
+
+  function displayPrimary(o) {
+    var lb = ((o.label || "").trim());
+    var text = lb || (o.url || "") || "(source)";
+    if (text.length > 64) return text.slice(0, 64) + "…";
+    return text;
+  }
+
+  var chips = document.getElementById("entity-side-source-picker-chips");
+  var hidWrap = document.getElementById("entity-side-source-picker-hidden-inputs");
+  var search = document.getElementById("entity-side-source-picker-search");
+  var list = document.getElementById("entity-side-source-picker-listbox");
+  if (!chips || !hidWrap || !search || !list) return;
+
+  var combo = root.querySelector(".entity-picker-combobox");
+  var addLabel = root.querySelector('label[for="entity-side-source-picker-search"]');
+  if (!combo) return;
+
+  function isInsideInteractiveShell(t) {
+    if (!t || t.nodeType !== 1) return false;
+    if (combo.contains(t)) return true;
+    return !!(addLabel && (addLabel === t || addLabel.contains(t)));
+  }
+
+  var selected = new Map();
+
+  function optById(rawId) {
+    var id = Number(rawId);
+    for (var i = 0; i < OPTIONS.length; i++) {
+      if (Number(OPTIONS[i].id) === id) return OPTIONS[i];
+    }
+    return null;
+  }
+
+  function readHiddensIntoSelected() {
+    selected.clear();
+    hidWrap.querySelectorAll('input[name="source_ids"]').forEach(function (inp) {
+      var id = parseInt(inp.value, 10);
+      if (!isFinite(id)) return;
+      var o = optById(id);
+      if (o) selected.set(id, o);
+    });
+  }
+
+  function sortKey(o) {
+    return ((((o.label || "").trim()) || (o.url || "")) + " " + String(o.id)).toLowerCase();
+  }
+
+  function syncHiddens() {
+    hidWrap.innerHTML = "";
+    var ids = Array.from(selected.keys()).sort(function (a, b) {
+      return sortKey(selected.get(a)).localeCompare(sortKey(selected.get(b)));
+    });
+    ids.forEach(function (id) {
+      var inp = document.createElement("input");
+      inp.type = "hidden";
+      inp.name = "source_ids";
+      inp.value = String(id);
+      hidWrap.appendChild(inp);
+    });
+  }
+
+  function removeChip(id) {
+    selected.delete(id);
+    syncHiddens();
+    renderChips();
+    refreshDropdown();
+  }
+
+  function renderChips() {
+    chips.innerHTML = "";
+    var ids = Array.from(selected.keys()).sort(function (a, b) {
+      return sortKey(selected.get(a)).localeCompare(sortKey(selected.get(b)));
+    });
+    if (!ids.length) {
+      chips.appendChild(emptyNote());
+      return;
+    }
+    ids.forEach(function (id) {
+      var o = selected.get(id);
+      var chip = document.createElement("span");
+      chip.className = "entity-chip entity-chip--source";
+
+      var label = document.createElement("span");
+      label.className = "entity-chip-label";
+      label.textContent = displayPrimary(o);
+
+      var kindSpan = document.createElement("span");
+      kindSpan.className = "entity-chip-kind muted mono";
+      kindSpan.textContent = "(" + (o.kind || "—") + ")";
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "entity-chip-remove";
+      btn.setAttribute("aria-label", "Remove source " + (displayPrimary(o) + " · " + (o.url || String(id))).trim());
+      btn.innerHTML = "×";
+
+      btn.addEventListener("click", function () {
+        removeChip(id);
+        search.focus();
+      });
+
+      chip.appendChild(label);
+      chip.appendChild(kindSpan);
+      chip.appendChild(btn);
+      chips.appendChild(chip);
+    });
+  }
+
+  function emptyNote() {
+    var p = document.createElement("p");
+    p.className = "muted entity-picker-empty";
+    p.textContent = "No sources linked — search below to attach ingests.";
+    return p;
+  }
+
+  function filterOptions(qRaw) {
+    var q = (qRaw || "").trim().toLowerCase();
+    var out = [];
+    for (var i = 0; i < OPTIONS.length; i++) {
+      var o = OPTIONS[i];
+      var id = Number(o.id);
+      if (selected.has(id)) continue;
+      var hay = (
+        String(o.label || "") +
+          " " +
+          String(o.url || "") +
+          " " +
+          String(o.kind || "") +
+          " " +
+          String(o.id)
+      ).toLowerCase();
+      if (!q || hay.indexOf(q) !== -1) out.push(o);
+    }
+    out.sort(function (a, b) {
+      var na = (((a.label || "").trim()) || a.url || String(a.id)).toLowerCase();
+      var nb = (((b.label || "").trim()) || b.url || String(b.id)).toLowerCase();
+      return na.localeCompare(nb);
+    });
+    var cap = q ? 40 : 12;
+    return out.slice(0, cap);
+  }
+
+  function setOpen(isOpen) {
+    list.hidden = !isOpen;
+    search.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
+  function refreshDropdown() {
+    var rows = filterOptions(search.value);
+    list.innerHTML = "";
+    if (!rows.length) {
+      var li0 = document.createElement("li");
+      li0.className = "entity-picker-dropdown-empty muted";
+      li0.textContent = search.value.trim() ? "No matching sources." : "All matching sources are already linked.";
+      li0.setAttribute("role", "presentation");
+      list.appendChild(li0);
+      setOpen(true);
+      return;
+    }
+    rows.forEach(function (o) {
+      var li = document.createElement("li");
+      li.className = "entity-picker-option";
+      li.setAttribute("role", "option");
+      li.setAttribute("data-source-option-id", String(o.id));
+      li.tabIndex = -1;
+
+      var t = document.createElement("span");
+      t.className = "entity-picker-option-title";
+      t.textContent = displayPrimary(o);
+
+      var kindOpt = document.createElement("span");
+      kindOpt.className = "entity-picker-option-kind muted mono";
+      kindOpt.textContent = "(" + (o.kind || "—") + ")";
+
+      li.appendChild(t);
+      li.appendChild(document.createTextNode(" "));
+      li.appendChild(kindOpt);
+
+      li.addEventListener("mousedown", function (ev) {
+        ev.preventDefault();
+        var id = Number(o.id);
+        selected.set(id, optById(id) || o);
+        syncHiddens();
+        renderChips();
+        search.value = "";
+        setOpen(false);
+        search.blur();
+      });
+
+      list.appendChild(li);
+    });
+    setOpen(true);
+  }
+
+  readHiddensIntoSelected();
+
+  Array.isArray(BOOT.initial) &&
+    BOOT.initial.forEach(function (raw) {
+      var id = Number(raw);
+      var o = optById(id);
+      if (o && !selected.has(id)) selected.set(id, o);
+    });
+  syncHiddens();
+  renderChips();
+
+  search.addEventListener("focus", function () {
+    refreshDropdown();
+  });
+
+  search.addEventListener("input", function () {
+    refreshDropdown();
+  });
+
+  search.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") {
+      setOpen(false);
+    }
+  });
+
+  function closeDropdownIfBackdrop(ev) {
+    if (ev.button != null && ev.button !== 0) return;
+    if (isInsideInteractiveShell(ev.target)) return;
+    setOpen(false);
+  }
+  document.addEventListener("pointerdown", closeDropdownIfBackdrop, true);
+
+  search.addEventListener("blur", function () {
+    setTimeout(function () {
+      var ae = document.activeElement;
+      if (!isInsideInteractiveShell(ae)) setOpen(false);
+    }, 0);
+  });
+
+  bootEl.remove();
+})();
+</script>

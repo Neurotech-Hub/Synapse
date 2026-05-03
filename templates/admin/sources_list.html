@@ -1,6 +1,81 @@
 {% extends "admin/base.html" %}
 {% import "admin/includes/help_macros.html" as syn_help %}
-{% set url_list_max = 64 %}
+{% set label_list_max = 52 %}
+
+{% macro source_rows(sec_list, hub_organization_id, hub_qualifying_source_ids, content_counts) %}
+  {% for sec in sec_list %}
+  <tbody class="tbl-origin-section">
+    <tr class="tbl-origin-section-head">
+      <td colspan="9">
+        <div class="tbl-origin-section-head-inner">
+          <div class="tbl-origin-section-title-row">
+            <span class="tbl-origin-section-title">{{ sec.title }}</span>
+            <span class="tbl-origin-section-badge">{{ sec.count }} {% if sec.count == 1 %}source{% else %}sources{% endif %}</span>
+          </div>
+        </div>
+      </td>
+    </tr>
+    {% for s in sec.sources %}
+    <tr class="tbl-origin-data-row">
+      <td>{{ s.id }}</td>
+      <td class="tbl-source-label-cell" title="{{ s.label if s.label else '' }}">
+        {% if s.label %}
+        {{ s.label[:label_list_max] }}{% if s.label|length > label_list_max %}…{% endif %}
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
+      </td>
+      <td class="muted">
+        {% if s.person_id %}
+          <span title="Owned by person">person</span>
+          {% if s.person %}<br/><a href="{{ url_for('admin.people_edit', pid=s.person.id) }}">{{ s.person.display_name }}</a>{% endif %}
+        {% elif s.organization_id %}
+          <span title="Owned by organization">org</span>
+          {% if s.organization %}<br/><a href="{{ url_for('admin.organizations_edit', oid=s.organization.id) }}">{{ s.organization.display_name }}</a>{% endif %}
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>{{ s.kind }}</td>
+      <td class="nowrap">
+        {% if s.pending %}
+          <span class="badge badge-await">Needs approval</span>
+        {% elif not s.enabled %}
+          <span class="badge badge-muted">Hidden from polling</span>
+        {% else %}
+          <span class="badge badge-active">Active</span>
+        {% endif %}
+      </td>
+      <td class="nowrap">
+        {% if hub_organization_id is not none and s.id in hub_qualifying_source_ids %}
+          <span class="badge badge-active" title="In Hub corpus organization">yes</span>
+        {% elif hub_organization_id is none %}
+          <span class="muted" title="Set Hub corpus organization under Leads → Hub settings">—</span>
+        {% else %}
+          <span class="muted" title="Outside Hub corpus sources">no</span>
+        {% endif %}
+      </td>
+      <td class="cell-url">
+        <a href="{{ s.url }}" target="_blank" rel="noopener noreferrer" class="tbl-url-link" title="{{ s.url }}">{{ s.url }}</a>
+      </td>
+      <td class="nowrap tbl-count"><a href="{{ url_for('admin.sources_view', sid=s.id) }}#content-items" title="Content items for this source">{{ content_counts.get(s.id, 0) }}</a></td>
+      <td class="tbl-actions">
+        <div class="tbl-actions-inner">
+          {% if s.pending %}
+          <form method="post" action="{{ url_for('admin.sources_approve', sid=s.id) }}" class="inline-form tbl-approve-wrap">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="primary-btn-inline btn-approve">Approve</button>
+          </form>
+          {% endif %}
+          <a href="{{ url_for('admin.sources_view', sid=s.id) }}">View</a>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  {% endfor %}
+{% endmacro %}
+
 {% block title %}Sources{% endblock %}
 {% block body %}
 <header class="page-head">
@@ -10,9 +85,25 @@
     {% call syn_help.tips_bubble() %}{% include "admin/includes/help_sources_list.html" %}{% endcall %}
   </div>
 </header>
+
+<nav class="sources-layout-toggle" aria-label="Sources list layout">
+  <a href="{{ url_for('admin.sources_list', layout='ownership') }}"
+     class="sources-layout-toggle-link{% if sources_layout == 'ownership' %} is-active{% endif %}"
+     {% if sources_layout == 'ownership' %}aria-current="page"{% endif %}>By owner</a>
+  <a href="{{ url_for('admin.sources_list', layout='by_site') }}"
+     class="sources-layout-toggle-link{% if sources_layout == 'by_site' %} is-active{% endif %}"
+     {% if sources_layout == 'by_site' %}aria-current="page"{% endif %}>By website</a>
+</nav>
+
+{% if sources_layout == 'by_site' %}
+
+<h2 class="dashboard-section-h2">All sources (grouped by website)</h2>
 <table class="tbl tbl-compact tbl-sources-grouped">
   <thead>
-    <tr><th>ID</th><th>Kind</th><th>Status</th><th>Lead src</th><th>Label</th><th>URL</th><th>Items</th><th>Snaps</th><th class="tbl-actions-col"></th></tr>
+    <tr>
+      <th>ID</th><th>Label</th><th>Owner</th><th>Kind</th><th>Status</th>
+      <th scope="col" class="nowrap">Hub corpus</th><th>URL</th><th>Items</th><th class="tbl-actions-col"></th>
+    </tr>
   </thead>
   {% for sec in origin_sections %}
   <tbody class="tbl-origin-section">
@@ -29,6 +120,16 @@
     {% for s in sec.sources %}
     <tr class="tbl-origin-data-row">
       <td>{{ s.id }}</td>
+      <td class="tbl-source-label-cell" title="{{ s.label if s.label else '' }}">
+        {% if s.label %}
+        {{ s.label[:label_list_max] }}{% if s.label|length > label_list_max %}…{% endif %}
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
+      </td>
+      <td class="muted">
+        {% if s.person_id and s.person %}<a href="{{ url_for('admin.people_edit', pid=s.person.id) }}">{{ s.person.display_name }}</a>{% elif s.organization_id and s.organization %}<a href="{{ url_for('admin.organizations_edit', oid=s.organization.id) }}">{{ s.organization.display_name }}</a>{% else %}—{% endif %}
+      </td>
       <td>{{ s.kind }}</td>
       <td class="nowrap">
         {% if s.pending %}
@@ -40,40 +141,73 @@
         {% endif %}
       </td>
       <td class="nowrap">
-        {% if s.lead_source %}
-          <span class="badge badge-active">yes</span>
+        {% if hub_organization_id is not none and s.id in hub_qualifying_source_ids %}
+          <span class="badge badge-active" title="In Hub corpus">yes</span>
+        {% elif hub_organization_id is none %}
+          <span class="muted">—</span>
         {% else %}
           <span class="muted">no</span>
         {% endif %}
       </td>
-      <td>{{ s.label or '—' }}</td>
       <td class="cell-url">
-        <a href="{{ s.url }}" target="_blank" rel="noopener noreferrer" class="tbl-url-link" title="{{ s.url }}">{{ s.url[:url_list_max] }}{% if s.url|length > url_list_max %}…{% endif %}</a>
+        <a href="{{ s.url }}" target="_blank" rel="noopener noreferrer" class="tbl-url-link">{{ s.url }}</a>
       </td>
-      <td class="nowrap tbl-count"><a href="{{ url_for('admin.sources_view', sid=s.id) }}#content-items" title="Content items for this source">{{ content_counts.get(s.id, 0) }}</a></td>
-      <td class="nowrap tbl-count"><a href="{{ url_for('admin.sources_view', sid=s.id) }}#snapshots" title="Snapshots for this source">{{ snapshot_counts.get(s.id, 0) }}</a></td>
-      <td class="tbl-actions">
-        <div class="tbl-actions-inner">
-          {% if s.pending %}
-          <form method="post" action="{{ url_for('admin.sources_approve', sid=s.id) }}" class="inline-form tbl-approve-wrap">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <button type="submit" class="primary-btn-inline btn-approve">Approve</button>
-          </form>
-          {% endif %}
-          <a href="{{ url_for('admin.sources_view', sid=s.id) }}">View</a>
-          <form method="post" action="{{ url_for('admin.sources_delete', sid=s.id) }}" class="inline-form" onsubmit="return confirm('Delete source {{ s.id }}?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <button type="submit" class="linkish-danger">Delete</button>
-          </form>
-        </div>
-      </td>
+      <td class="nowrap tbl-count"><a href="{{ url_for('admin.sources_view', sid=s.id) }}#content-items">{{ content_counts.get(s.id, 0) }}</a></td>
+      <td class="tbl-actions"><a href="{{ url_for('admin.sources_view', sid=s.id) }}">View</a></td>
     </tr>
     {% endfor %}
   </tbody>
   {% else %}
-  <tbody>
-    <tr><td colspan="9" class="tbl-empty">No sources yet. Use <strong>New source</strong> to add one.</td></tr>
-  </tbody>
+  <tbody><tr><td colspan="9" class="tbl-empty">No sources.</td></tr></tbody>
   {% endfor %}
 </table>
+
+{% else %}
+
+<h2 class="dashboard-section-h2">Sources owned by people</h2>
+{% if person_sources %}
+<table class="tbl tbl-compact tbl-sources-grouped">
+  <thead>
+    <tr>
+      <th>ID</th><th>Label</th><th>Owner</th><th>Kind</th><th>Status</th>
+      <th scope="col" class="nowrap" title="Included in Hub corpus organization (Leads Hub settings).">Hub corpus</th><th>URL</th><th>Items</th><th class="tbl-actions-col"></th>
+    </tr>
+  </thead>
+  {{ source_rows(person_origin_sections, hub_organization_id, hub_qualifying_source_ids, content_counts) }}
+</table>
+{% else %}
+<p class="muted contextual-note">No person-owned rows yet.</p>
+{% endif %}
+
+<h2 class="dashboard-section-h2">Sources owned by organizations</h2>
+{% if org_sources %}
+<table class="tbl tbl-compact tbl-sources-grouped">
+  <thead>
+    <tr>
+      <th>ID</th><th>Label</th><th>Owner</th><th>Kind</th><th>Status</th>
+      <th scope="col" class="nowrap">Hub corpus</th><th>URL</th><th>Items</th><th class="tbl-actions-col"></th>
+    </tr>
+  </thead>
+  {{ source_rows(org_origin_sections, hub_organization_id, hub_qualifying_source_ids, content_counts) }}
+</table>
+{% else %}
+<p class="muted contextual-note">No organization-owned rows yet.</p>
+{% endif %}
+
+<h2 class="dashboard-section-h2">Unassigned / pending owners</h2>
+{% if orphan_sources %}
+<table class="tbl tbl-compact tbl-sources-grouped">
+  <thead>
+    <tr>
+      <th>ID</th><th>Label</th><th>Owner</th><th>Kind</th><th>Status</th>
+      <th scope="col" class="nowrap">Hub corpus</th><th>URL</th><th>Items</th><th class="tbl-actions-col"></th>
+    </tr>
+  </thead>
+  {{ source_rows(orphan_origin_sections, hub_organization_id, hub_qualifying_source_ids, content_counts) }}
+</table>
+{% else %}
+<p class="muted contextual-note">Everything has an XOR owner assigned.</p>
+{% endif %}
+
+{% endif %}
 {% endblock %}

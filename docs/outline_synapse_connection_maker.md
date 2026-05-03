@@ -10,7 +10,7 @@ This document is an **outline for discussion**, not an approved roadmap.
 
 | | **Synapse** | **Connection Maker** |
 |---|-------------|----------------------|
-| **Role now** | Main app: ingest, dedupe, admin ops, Hub-vs-world **lead qualification**, exports | FastAPI + Next experiment: PI registry, personas, ingest toward **digital twin** UX |
+| **Role now** | Main app: ingest, dedupe, admin ops, Hub-centric **lead reports**, exports | FastAPI + Next experiment: PI registry, personas, ingest toward **digital twin** UX |
 | **UX bias** | Admin tables, filters, CSV — accurate for ops, feels “spreadsheet-like” | Card grid + PI detail pages — scan-friendly summaries, badges, inferred blocks |
 | **Truth for merge** | **Canonical data + relationships live here first** | Patterns, prompts, UX, and spikes inform what we bolt onto Synapse |
 
@@ -25,7 +25,7 @@ From the CM UI (localhost examples in the playground):
 - **Publications**: linked titles, dates, PMID-style identifiers — grounding the persona in provenance similar in spirit to our `content_item` + links.
 - **Nav affordances**: “All PIs,” search/filter (“All scores”), and placeholders for **Matches** and **Newsletters** — roadmap surfacing.
 
-**Takeaway:** CM optimizes **at-a-glance identity** and **narrative trust** (“inferred”, tags, scoring). Synapse optimizes **provenance and pipes** (`source` → `content_item` → optional `lead_candidate`, entity tagging on sources).
+**Takeaway:** CM optimizes **at-a-glance identity** and **narrative trust** (“inferred”, tags, scoring). Synapse optimizes **provenance and pipes** (`source` → `content_item` → optional **`lead_report`** synthesis jobs, entity tagging on sources).
 
 ---
 
@@ -35,7 +35,7 @@ From the CM UI (localhost examples in the playground):
 
 - **`slug`**, **`kind`** (`lab` \| `person` \| `place` \| `org`), **`display_name`**, **`notes`**, timestamps.
 - **Many-to-many** with **`source`** via `source_entity` (tracked entities on each source UI).
-- **Leads**: optional `LeadCandidate.entity_id`; qualification uses an **entity catalog** derived from Hub + candidate sources.
+- **Leads**: **`lead_report`** rows (Hub-centric synthesis); evidence is assembled from Hub corpus items, personas, and configured targets—not legacy `lead_candidate` qualification.
 
 **Strength:** Clear relational spine — entities are join keys across ingestion and lead output.
 
@@ -46,9 +46,9 @@ From the CM UI (localhost examples in the playground):
 ## 4. Why Synapse still looks “more expandable”
 
 - **Source diversity:** RSS + HTML monitors + public URL submission + snapshots — not limited to PubMed-centric PI feeds.
-- **Operational closure:** Poll logs, qualification logs, bulk actions, CSV export — built for recurring operator use.
+- **Operational closure:** Poll logs, lead-report job logs, admin review workflows — built for recurring operator use.
 - **Extensibility hook:** Any new **derived artifact** can hang off existing rows:  
-  `Source` / `ContentItem` / `Entity` / `LeadCandidate` (+ future materialized views or JSON blobs with versions).
+  `Source` / `ContentItem` / `Entity` / `LeadReport` (+ future materialized views or JSON blobs with versions).
 
 CM’s compelling piece is less the transport and more **where agentic summaries land in the UX**.
 
@@ -87,7 +87,7 @@ Ask for each field or feature:
 
 ### C. Intelligence
 
-- Align with Synapse’s existing pattern: **Ollama-backed jobs** writing structured outputs (like lead qualification) with **explicit prompt versioning** (already mirrored for the qualified-lead prompt in admin).
+- Align with Synapse’s existing pattern: **Ollama-backed jobs** writing structured outputs (Hub lead reports) with **explicit prompt/evidence versioning** (`SYNAPSE_LEAD_REPORT_PIPELINE_SEMVER` and fingerprints on `lead_report`).
 - Optional **dual-model** spike (cloud for long-form prose) mirrors CM’s split — decide per cost/privacy/env.
 
 ### D. Integration mechanics (if CM stays separate briefly)

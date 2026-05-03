@@ -1,0 +1,104 @@
+{# Rollup persona (org/place): ``subject_title``, ``refresh_endpoint`` (full url_for), ``identity_row``, ``identity_paper_days`` optional #}
+<section class="persona-dash persona-dash--rollup" id="rollup-persona-dash" aria-labelledby="rollup-persona-heading">
+  <div class="persona-dash-shell">
+    <header class="persona-dash-header">
+      <div class="persona-dash-header-row">
+        <h2 id="rollup-persona-heading" class="persona-dash-heading">Rollup persona — <strong>{{ subject_title }}</strong></h2>
+        <form method="post" action="{{ refresh_endpoint }}" class="persona-dash-refresh" id="rollup-persona-refresh-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button type="submit" class="primary-btn-inline persona-dash-refresh-btn" data-rollups-refresh-submit>Rebuild rollup</button>
+        </form>
+      </div>
+      {% if identity_row and identity_row.build_status == 'ok' %}
+      <div class="persona-dash-summary">
+        {% if identity_row.notes and identity_row.notes.strip() %}
+        <p class="persona-notes-prose">{{ identity_row.notes }}</p>
+        {% else %}
+        <p class="persona-notes-prose muted">—</p>
+        {% endif %}
+      </div>
+      {% endif %}
+    </header>
+
+    <div class="persona-dash-body">
+      {% if not identity_row %}
+      <p class="muted persona-dash-empty">No rollup yet — <strong>Rebuild rollup</strong> after member personas exist.</p>
+      {% elif identity_row.build_status == 'stale' %}
+      <div class="persona-dash-notice persona-dash-notice--warn" role="status">
+        <p class="persona-dash-notice-msg"><strong>{{ identity_row.build_status }}</strong>{% if identity_row.build_error %}: {{ identity_row.build_error }}{% endif %}</p>
+      </div>
+      {% elif identity_row.build_status == 'failed' %}
+      <div class="persona-dash-notice persona-dash-notice--bad" role="status">
+        <span class="persona-dash-notice-label">Rebuild failed</span>
+        {% if identity_row.build_error %}
+        <pre class="persona-dash-error-pre">{{ identity_row.build_error }}</pre>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="persona-dash-kpis" role="presentation">
+        <div class="persona-kpi">
+          <span class="persona-kpi-label">Collaboration</span>
+          <span class="persona-kpi-value">{% if identity_row.collab_openness_score is not none %}{{ identity_row.collab_openness_score | round(2) }}{% else %}—{% endif %}</span>
+        </div>
+        <div class="persona-kpi persona-kpi--text">
+          <span class="persona-kpi-label">Generated</span>
+          <span class="persona-kpi-value persona-kpi-meta muted">
+            {% if identity_row.generated_at %}{{ identity_row.generated_at.strftime('%Y-%m-%d %H:%M UTC') }}{% else %}—{% endif %}
+            {% if identity_row.model_used %} · {{ identity_row.model_used }}{% endif %}
+          </span>
+        </div>
+      </div>
+      <div class="persona-dash-scroll">
+        <div class="persona-dash-grid">
+          <div class="persona-card">
+            <h3 class="persona-card-title">Focus</h3>
+            <ul class="persona-dash-list">{% for x in identity_row.research_focus %}<li>{{ x }}</li>{% else %}<li class="muted">—</li>{% endfor %}</ul>
+            <h3 class="persona-card-title">Methods</h3>
+            <ul class="persona-dash-list">{% for x in identity_row.methods %}<li>{{ x }}</li>{% else %}<li class="muted">—</li>{% endfor %}</ul>
+          </div>
+          <div class="persona-card">
+            <h3 class="persona-card-title">Keywords</h3>
+            <ul class="persona-dash-list">{% for x in identity_row.keywords %}<li>{{ x }}</li>{% else %}<li class="muted">—</li>{% endfor %}</ul>
+            <h3 class="persona-card-title">Projects</h3>
+            <ul class="persona-dash-list">{% for x in identity_row.current_projects %}<li>{{ x }}</li>{% else %}<li class="muted">—</li>{% endfor %}</ul>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <p class="persona-dash-foot muted" data-rollups-refresh-status hidden role="status" aria-live="polite"></p>
+  </div>
+</section>
+<script>
+(function () {
+  var form = document.getElementById("rollup-persona-refresh-form");
+  var btn = document.querySelector("[data-rollups-refresh-submit]");
+  var dash = document.getElementById("rollup-persona-dash");
+  var stat = document.querySelector("[data-rollups-refresh-status]");
+  if (!form || !btn || !dash) return;
+  var defaultLabel = (btn.textContent || "").trim();
+  form.addEventListener("submit", function () {
+    btn.setAttribute("aria-busy", "true");
+    dash.setAttribute("aria-busy", "true");
+    dash.classList.add("persona-dash--busy");
+    btn.textContent = "Rebuilding…";
+    btn.disabled = true;
+    if (stat) {
+      stat.hidden = false;
+      stat.textContent = "Running local model — leave this tab open.";
+    }
+  });
+  window.addEventListener("pageshow", function () {
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+    dash.removeAttribute("aria-busy");
+    dash.classList.remove("persona-dash--busy");
+    btn.textContent = defaultLabel;
+    if (stat) {
+      stat.hidden = true;
+      stat.textContent = "";
+    }
+  });
+})();
+</script>

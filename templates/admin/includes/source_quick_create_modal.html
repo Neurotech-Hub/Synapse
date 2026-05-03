@@ -1,0 +1,56 @@
+{# Expects ``quick_source_form``, ``quick_create_next``, ``quick_create_owner_person_id``, ``quick_create_owner_organization_id`` #}
+<dialog id="quick-source-dialog" class="admin-dialog quick-source-modal" aria-labelledby="quick-source-dialog-title">
+  <div class="admin-dialog-sheet">
+    <div class="admin-dialog-head">
+      <h2 id="quick-source-dialog-title" class="admin-dialog-title">Quick-add source</h2>
+      <button type="button" class="admin-dialog-close" data-quick-source-dialog-close aria-label="Close">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="admin-dialog-body">
+      <p class="muted contextual-note quick-source-modal-hint">
+        Creates an approved catalog source and attaches it as owner of this {% if quick_create_owner_person_id %}person{% else %}organization{% endif %}.
+        Run <strong>Poll now</strong> afterward if you need ingest before rebuilding persona rollups.
+      </p>
+      <form method="post" action="{{ url_for('admin.sources_quick_create') }}" class="admin-form" id="quick-source-form">
+        <input type="hidden" name="next" value="{{ quick_create_next }}"/>
+        <input type="hidden" name="for_person_id" value="{{ quick_create_owner_person_id if quick_create_owner_person_id else '' }}"/>
+        <input type="hidden" name="for_organization_id" value="{{ quick_create_owner_organization_id if quick_create_owner_organization_id else '' }}"/>
+        {{ quick_source_form.hidden_tag() }}
+        {% set visit_link_id = 'quick-src-visit-link' %}
+        {% with form=quick_source_form %}
+        {% include "admin/includes/source_fields_inner.html" %}
+        {% endwith %}
+        <div class="form-submit-row">
+          {{ quick_source_form.submit(class_='primary-btn') }}
+        </div>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+{% set visit_url_root_selector = "#quick-source-form" %}
+{% set visit_url_field_name = quick_source_form.url.name %}
+{% set visit_link_id = "quick-src-visit-link" %}
+{% include "admin/includes/source_visit_url_script.html" %}
+<script>
+(function () {
+  var dlg = document.getElementById("quick-source-dialog");
+  if (!dlg) return;
+  function openDlg() {
+    if (dlg.showModal) dlg.showModal();
+  }
+  function closeDlg() {
+    if (dlg.close) dlg.close();
+  }
+  document.querySelectorAll("[data-quick-source-dialog-open]").forEach(function (btn) {
+    btn.addEventListener("click", openDlg);
+  });
+  document.querySelectorAll("[data-quick-source-dialog-close]").forEach(function (btn) {
+    btn.addEventListener("click", closeDlg);
+  });
+  dlg.addEventListener("click", function (ev) {
+    if (ev.target === dlg) closeDlg();
+  });
+})();
+</script>

@@ -16,7 +16,7 @@
     {% set sha = sn.body_sha256 %}
     <tr>
       <td class="nowrap">
-        <a href="{{ url_for('admin.sources_view', sid=source.id) }}#snapshots">{% if source.label %}{{ source.label }}{% else %}Source #{{ source.id }}{% endif %}</a>
+        <a href="{{ url_for('admin.sources_snapshots', sid=source.id) }}">Source #{{ source.id }}</a>
         <span class="muted tiny mono"> · {{ source.id }}</span>
       </td>
       <td>{{ sn.id }}</td>

@@ -1,12 +1,16 @@
 <section class="admin-tip-sec">
   <h3 class="admin-tip-h">Poll now</h3>
-  <p class="admin-tip-p">Fetches <strong>approved</strong> sources that are not hidden. Includes RSS feeds and HTML monitors. While a run is in progress, refresh the page to see progress; the button is disabled until it finishes.</p>
+  <p class="admin-tip-p">Fetches <strong>approved</strong> sources that are not hidden. Includes RSS feeds and HTML monitors. Refreshing ingest gives persona builders something to read on the identities side — if items are empty, run this before rebuilding. After you start a run, progress appears in the <strong>Polling &amp; ingest</strong> card with a shortened host/path for the source in progress (or the next queued one), plus the bar; <strong>Poll now</strong> stays disabled meanwhile.</p>
 </section>
 <section class="admin-tip-sec">
-  <h3 class="admin-tip-h">Lead qualification</h3>
-  <p class="admin-tip-p">Configure and run it from <strong>Leads → Lead pipeline</strong>. Compares recent Hub content with new <em>world</em> items using Ollama and <code>prompts/qualified_lead.txt</code>. <code>[lead-qual]</code> summaries are listed under <strong>Recent qualification logs</strong> on the <a href="{{ url_for('admin.leads_list') }}">Leads</a> page.</p>
+  <h3 class="admin-tip-h">Stale personas vs polling</h3>
+  <p class="admin-tip-p">Editing sources, subjects, or ownership marks persona rows <code>stale</code> without auto-running heavy LLM work. Persona rebuilds read <strong>ingested content</strong> from owned sources — if everything is still empty, use <strong>Poll now</strong> first. The identities card labels rows <strong>Polling first</strong> until at least one content item exists on owned eligible sources. <strong>Rebuild all</strong> runs a bounded batch of poll-ready stale subjects each click — batch size follows <code>SYNAPSE_DASH_IDENTITY_BATCH</code> (or the source-save identity burst fallback) — skips <strong>Polling first</strong> rows — and is disabled when the <code>stale</code> count is zero or while a poll is running. Use per-row <strong>Rebuild</strong> for individual subjects anytime.</p>
+</section>
+<section class="admin-tip-sec">
+  <h3 class="admin-tip-h">Lead reports</h3>
+  <p class="admin-tip-p">Queue targeted Hub-vs-subject synthesis from <a href="{{ url_for('admin.leads_list') }}">Leads</a>. Job output is logged as <code>[lead-report]</code> (shown on that page).</p>
 </section>
 <section class="admin-tip-sec">
   <h3 class="admin-tip-h">Sources awaiting approval</h3>
-  <p class="admin-tip-p">URLs submitted from the public site appear here until you approve them (or open the source and approve there).</p>
+  <p class="admin-tip-p">URLs submitted from the public site appear here until you approve them — open each source with <strong>View to assign…</strong> to set an owner if needed and use <strong>Approve for polling</strong> there.</p>
 </section>

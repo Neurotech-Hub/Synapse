@@ -1,0 +1,28 @@
+{# In-entity-edit form: mirror Tracked entities on Edit Source.
+   Quick-create modal must be included AFTER the enclosing </form> (nested forms are invalid HTML and break Submit). #}
+<div class="field-group entity-linked-sources-field-group">
+  <span class="field-label field-label-block" id="entity-linked-sources-label">Associated sources</span>
+  {% if quick_source_form is defined %}
+  <p class="entity-quick-source-row">
+    <button type="button" class="linkish" data-quick-source-dialog-open>{{ quick_source_open_label|default('Add source…') }}</button>
+    {% if not hide_standalone_source_nav %}
+    <span class="muted entity-quick-source-or">or open</span>
+    <a href="{{ url_for('admin.sources_new') }}">New source</a>
+    <span class="muted">·</span>
+    <a href="{{ url_for('admin.sources_list') }}">Sources</a>
+    {% endif %}
+  </p>
+  {% endif %}
+  {% if source_picker_bootstrap.options|length %}
+  {% if not suppress_entity_linked_sources_hints and not hide_linked_sources_catalog_hint %}
+  <p class="muted contextual-note" id="entity-linked-sources-hint">Link sources this catalog row should own for polling, persona evidence, and lead catalog.</p>
+  {% endif %}
+  {% include "admin/includes/entity_side_source_picker.html" %}
+  {% elif quick_source_form is defined %}
+  {% if not suppress_entity_linked_sources_hints %}
+  <p class="muted contextual-note" id="entity-linked-sources-hint-empty">{% if hide_standalone_source_nav %}No other sources in the catalog yet — use <strong>{{ quick_source_open_label|default('Add source…') }}</strong> to create one for this subject.{% else %}No other sources in the catalog yet — use <strong>{{ quick_source_open_label|default('Add source…') }}</strong> to create one for this subject, or add standalone sources from the links above.{% endif %}</p>
+  {% endif %}
+  {% else %}
+  <p class="muted contextual-note">No sources yet — <a href="{{ url_for('admin.sources_new') }}">New source</a> or open <a href="{{ url_for('admin.sources_list') }}">Sources</a>.</p>
+  {% endif %}
+</div>

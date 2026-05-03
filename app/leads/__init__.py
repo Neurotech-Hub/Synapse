@@ -1,1 +1,1 @@
-"""Lead qualification (Hub vs world) and prompts."""
+"""Hub-centric lead reports and Hub corpus helpers."""

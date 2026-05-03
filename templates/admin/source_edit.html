@@ -7,7 +7,7 @@
   {% call syn_help.tips_bubble() %}{% include "admin/includes/help_source_form_tips.html" %}{% endcall %}
 </header>
 
-<form method="post" class="admin-form">
+<form method="post" class="admin-form" id="source-new-form">
 {% include "admin/includes/source_fields.html" %}
   <div class="form-submit-row">
     {{ form.submit(class_='primary-btn') }}
@@ -16,5 +16,6 @@
 
 <p class="admin-form-foot"><a href="{{ url_for('admin.sources_list') }}" class="back-link">&larr; Back to Sources</a></p>
 
+{% set visit_url_root_selector = "#source-new-form" %}
 {% include "admin/includes/source_visit_url_script.html" %}
 {% endblock %}

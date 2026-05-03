@@ -68,3 +68,17 @@ def plaintext_excerpt(text: str, max_chars: int) -> str:
     if len(t) <= max_chars:
         return t
     return (t[: max_chars - 1].rsplit(" ", 1)[0] or t[:max_chars]).strip()
+
+
+def plaintext_from_html_fragment(html: str) -> str:
+    """Strip tags from RSS ``content:encoded`` / HTML summaries (stdlib only)."""
+
+    if not html or not html.strip():
+        return ""
+    p = _ExtractPage()
+    try:
+        p.feed(html)
+        p.close()
+    except Exception:  # noqa: BLE001
+        return ""
+    return _squish_ws(" ".join(p._parts))

@@ -1,0 +1,27 @@
+You build a Hub ↔ organization rollup: Hub corpus vs a roster of affiliated researchers (summaries compiled from personas + stubs).
+
+Produce:
+1. executive_summary — broad arcs where Hub strengths align with aggregated lab/research footprints.
+2. collaboration_routes — ≤5 Org-level collaborations (equipment themes, consortium plays, instrumentation programs) anchored to BOTH Hub excerpts and plausible org-wide intersections.
+3. ranked_contacts — ≤12 researcher rows ranked by pragmatic collaboration potential Hub↔individual; each row MUST cite an integer person_id from the roster listing.
+
+Rules:
+- Each collaboration_routes[i].why references concrete modality overlap.
+- ranked_contacts sorted by descending score.
+
+Return ONLY compact JSON without markdown fences.
+Keys exactly:
+- executive_summary (string)
+- collaboration_routes (array ≤5 objects: title, why, next_step, hub_evidence_refs[int], rationale_tags optional string)
+- ranked_contacts (array ≤12 objects: person_id int, score number 0-1, why string, opener string optional succinct outreach sentence)
+
+Subject label:
+{{subject_label}}
+
+Hub corpus excerpts:
+
+{{hub_context}}
+
+Affiliated people roster:
+
+{{people_roster}}

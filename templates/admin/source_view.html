@@ -1,20 +1,72 @@
 {% extends "admin/base.html" %}
 {% import "admin/includes/help_macros.html" as syn_help %}
-{% block title %}Source{% if source.label %}: {{ source.label }}{% else %} {{ source.id }}{% endif %}{% endblock %}
+{% block title %}Edit Source #{{ source.id }}{% endblock %}
 {% block body %}
 <header class="page-head">
-  <h1>{% if source.label %}{{ source.label }}{% else %}Source #{{ source.id }}{% endif %}</h1>
+  <h1>Edit Source #{{ source.id }}</h1>
   {% call syn_help.tips_bubble() %}{% include "admin/includes/help_source_view_tips.html" %}{% endcall %}
 </header>
-<p class="muted contextual-note">ID {{ source.id }} · <span class="cell-url-wrap">{{ source.url }}</span>{% if source.kind == 'rss_feed' %} · RSS ingest{% elif source.kind == 'html_page' %} · HTML snapshot ingest{% endif %}</p>
+<p class="muted contextual-note">ID {{ source.id }}{% if source.label %} · <strong>{{ source.label }}</strong>{% endif %} · <span class="cell-url-wrap">{{ source.url }}</span>{% if source.kind == 'rss_feed' %} · RSS ingest{% elif source.kind == 'html_page' %} · HTML snapshot ingest{% endif %}</p>
 
 {% if source.pending %}
-<section class="review-banner" aria-label="Approval">
-  <p class="review-banner-text">This source is waiting for approval and is <strong>not</strong> included in Poll now.</p>
-  <form method="post" action="{{ url_for('admin.sources_approve', sid=source.id) }}" class="review-banner-action">
+<section class="review-banner review-banner--approve" aria-label="Approval">
+  <p class="review-banner-text">Pending — not included in <strong>Poll now</strong> until approved.</p>
+  <form method="post" action="{{ url_for('admin.sources_approve', sid=source.id) }}" class="review-banner-approve-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-    <button type="submit" class="primary-btn-inline btn-approve">Approve for polling</button>
+    <button type="submit" class="primary-btn review-banner-approve-btn">Approve for polling</button>
+    <fieldset class="review-approve-owner-fieldset">
+      <legend class="field-label field-label-block">Optional owner assignment</legend>
+      <div class="review-approve-owner-radios">
+        <label class="field-check-label">
+          <input type="radio" name="approve_owner_kind" value="skip" checked class="field-check-input"/>
+          <span>Keep current assignment</span>
+        </label>
+        <label class="field-check-label">
+          <input type="radio" name="approve_owner_kind" value="person" class="field-check-input" id="approve-owner-radio-person"/>
+          <span>Assign to person</span>
+        </label>
+        <label class="field-check-label">
+          <input type="radio" name="approve_owner_kind" value="organization" class="field-check-input" id="approve-owner-radio-org"/>
+          <span>Assign to organization</span>
+        </label>
+      </div>
+      <div id="approve-wrap-person" class="review-approve-owner-pick" hidden>
+        <label class="field-label" for="pending-owner-person">Person</label>
+        <select name="approve_owner_person_id" id="pending-owner-person" class="field-input">
+          <option value="">— choose —</option>
+          {% for p in people_for_owner %}<option value="{{ p.id }}">{{ p.display_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div id="approve-wrap-organization" class="review-approve-owner-pick" hidden>
+        <label class="field-label" for="pending-owner-org">Organization</label>
+        <select name="approve_owner_organization_id" id="pending-owner-org" class="field-input">
+          <option value="">— choose —</option>
+          {% for o in organizations_for_owner %}<option value="{{ o.id }}">{{ o.display_name }}</option>{% endfor %}
+        </select>
+      </div>
+    </fieldset>
+    {% if source.ownership_hint %}
+    <p class="muted contextual-note review-approve-hint-note">Public submit hint: <strong>{{ source.ownership_hint }}</strong></p>
+    {% endif %}
   </form>
+  <script>
+  (function () {
+    var rSkip = document.querySelector('.review-banner-approve-form input[name="approve_owner_kind"][value="skip"]');
+    var rPerson = document.getElementById("approve-owner-radio-person");
+    var rOrg = document.getElementById("approve-owner-radio-org");
+    var wp = document.getElementById("approve-wrap-person");
+    var wo = document.getElementById("approve-wrap-organization");
+    if (!rSkip || !rPerson || !rOrg || !wp || !wo) return;
+    function sync() {
+      wp.hidden = !rPerson.checked;
+      wo.hidden = !rOrg.checked;
+    }
+    rSkip.addEventListener("change", sync);
+    rPerson.addEventListener("change", sync);
+    rOrg.addEventListener("change", sync);
+    sync();
+  })();
+  </script>
 </section>
 {% else %}
 <p class="source-status-line muted">
@@ -29,31 +81,62 @@
 
 <section id="settings" class="source-view-section">
   <h2 class="source-view-h2">Settings</h2>
-  <form method="post" class="admin-form">
+  <form method="post" class="admin-form" id="source-settings-form">
 {% include "admin/includes/source_fields.html" %}
     <div class="field-group">
-      <span class="field-label">Tracked entities</span>
-      {% if all_entities %}
-      <div class="entity-check-list">
-        {% for ent in all_entities %}
-        <label class="field-check-label entity-check-item">
-          <input type="checkbox" name="entity_ids" value="{{ ent.id }}" class="field-check-input" {% if ent.id in selected_entity_ids %}checked{% endif %}/>
-          <span>{{ ent.display_name }} <span class="muted mono">({{ ent.slug }})</span></span>
-        </label>
-        {% endfor %}
-      </div>
-      {% else %}
-      <p class="muted contextual-note">None yet — <a href="{{ url_for('admin.entities_new') }}">create an entity</a> or <a href="{{ url_for('admin.entities_list') }}">open the list</a>.</p>
-      {% endif %}
+      <span class="field-label field-label-block">Source owner (XOR)</span>
+      <p class="muted contextual-note">Exactly one of <strong>person</strong> or <strong>organization</strong>. This drives persona evidence for lead reports and Hub corpus membership (via the Hub corpus organization and its people).</p>
+      <select name="owner_kind" id="source-owner-kind" class="field-input">
+        <option value="none" {% if owner_kind == 'none' %}selected{% endif %}>Unassigned</option>
+        <option value="person" {% if owner_kind == 'person' %}selected{% endif %}>Person</option>
+        <option value="organization" {% if owner_kind == 'organization' %}selected{% endif %}>Organization</option>
+      </select>
     </div>
-    <div class="form-submit-row form-submit-row-split">
-      {{ form.submit(class_='primary-btn') }}
-      <div class="form-submit-row-actions">
-        {% if not source.pending %}
-        <button type="submit" class="disapprove-btn" formaction="{{ url_for('admin.sources_disapprove', sid=source.id) }}" formmethod="post" formnovalidate onclick="return confirm('Send this source back to review? It will not be polled until approved again.');">Disapprove</button>
-        {% endif %}
-        <button type="submit" class="danger-btn form-delete-source-btn" formaction="{{ url_for('admin.sources_delete', sid=source.id) }}" formmethod="post" formnovalidate onclick="return confirm('Delete source {{ source.id }} and all snapshots and content items?');">Delete source</button>
+    <div class="field-group source-owner-sub" id="wrap-owner-person">
+      <label class="field-label" for="owner-person-select">Person</label>
+      <select name="owner_person_id" id="owner-person-select" class="field-input">
+        <option value="">—</option>
+        {% for p in people_for_owner %}
+        <option value="{{ p.id }}" {% if source.person_id == p.id %}selected{% endif %}>{{ p.display_name }} ({{ p.slug }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-group source-owner-sub" id="wrap-owner-org">
+      <label class="field-label" for="owner-org-select">Organization</label>
+      <select name="owner_organization_id" id="owner-org-select" class="field-input">
+        <option value="">—</option>
+        {% for o in organizations_for_owner %}
+        <option value="{{ o.id }}" {% if source.organization_id == o.id %}selected{% endif %}>{{ o.display_name }} ({{ o.slug }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <script>
+    (function () {
+      var kind = document.getElementById("source-owner-kind");
+      var wp = document.getElementById("wrap-owner-person");
+      var wo = document.getElementById("wrap-owner-org");
+      if (!kind || !wp || !wo) return;
+      function sync() {
+        var k = kind.value;
+        wp.hidden = k !== "person";
+        wo.hidden = k !== "organization";
+        wp.style.display = k === "person" ? "" : "none";
+        wo.style.display = k === "organization" ? "" : "none";
+      }
+      kind.addEventListener("change", sync);
+      sync();
+    })();
+    </script>
+    <div class="form-submit-row form-submit-row--source-edit">
+      <div class="form-submit-primary-actions">
+        {{ form.submit(class_='primary-btn') }}
+        <button type="submit" class="danger-btn" formaction="{{ url_for('admin.sources_delete', sid=source.id) }}" formmethod="post" formnovalidate onclick="return confirm('Delete source {{ source.id }} and all snapshots and content items?');">Delete source</button>
       </div>
+      {% if not source.pending %}
+      <div class="form-submit-trailing-actions">
+        <button type="submit" class="disapprove-btn" formaction="{{ url_for('admin.sources_disapprove', sid=source.id) }}" formmethod="post" formnovalidate onclick="return confirm('Send this source back to review? It will not be polled until approved again.');">Disapprove</button>
+      </div>
+      {% endif %}
     </div>
   </form>
 </section>
@@ -101,5 +184,6 @@
 
 <p class="admin-form-foot"><a href="{{ url_for('admin.sources_list') }}" class="back-link">&larr; Back to Sources</a></p>
 
+{% set visit_url_root_selector = "#source-settings-form" %}
 {% include "admin/includes/source_visit_url_script.html" %}
 {% endblock %}

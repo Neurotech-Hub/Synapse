@@ -11,18 +11,38 @@
 </header>
 <table class="tbl">
   <thead>
-    <tr><th>Slug</th><th>Kind</th><th>Name</th><th class="tbl-actions-col"></th></tr>
+    <tr><th>Slug</th><th>Kind</th><th>Name</th><th scope="col" class="tbl-hub-mark-col" title="Configured Neurotech Hub entity, or tagged on a source that also includes Neurotech Hub">Neurotech Hub</th><th class="num">Sources</th><th>Collab score</th><th class="tbl-actions-col"></th></tr>
   </thead>
   <tbody>
   {% for e in rows %}
     <tr>
       <td class="mono">{{ e.slug }}</td>
-      <td>{{ e.kind }}</td>
+      <td class="nowrap"><span class="badge badge-entity-kind badge-entity-kind--{{ e.kind }}">{{ e.kind }}</span></td>
       <td>{{ e.display_name }}</td>
+      <td class="tbl-hub-mark-col">
+        {% if hub_program_entity_id is not none and e.id in neurotech_hub_mark_entity_ids %}
+        {% set nh_designated = (e.id == hub_program_entity_id) %}
+        <span
+          class="entity-neurotech-hub-mark"
+          role="img"
+          {% if nh_designated %}
+          aria-label="Neurotech Hub Entity"
+          title="Configured as Neurotech Hub Entity under Leads."
+          {% else %}
+          aria-label="Tagged on a Neurotech Hub source"
+          title="Tagged on at least one source that also includes Neurotech Hub."
+          {% endif %}
+        >✓</span>
+        {% else %}
+        <span class="muted" aria-hidden="true">—</span>
+        {% endif %}
+      </td>
+      <td class="num">{{ entity_source_counts.get(e.id, 0) }}</td>
+      <td>{% if e.identity and e.identity.collab_openness_score is not none %}{{ e.identity.collab_openness_score | round(2) }}{% else %}—{% endif %}</td>
       <td class="tbl-actions"><a href="{{ url_for('admin.entities_edit', eid=e.id) }}">Edit</a></td>
     </tr>
   {% else %}
-    <tr><td colspan="4" class="tbl-empty muted">No entities — create one to tag sources.</td></tr>
+    <tr><td colspan="7" class="tbl-empty muted">No entities — create one to tag sources.</td></tr>
   {% endfor %}
   </tbody>
 </table>
