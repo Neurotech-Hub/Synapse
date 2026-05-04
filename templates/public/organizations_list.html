@@ -1,0 +1,20 @@
+{% extends "public/layout.html" %}
+{% block title %}Organizations{% endblock %}
+{% block content %}
+  <section class="public-page-hero">
+    <h1 class="public-page-title">Organizations</h1>
+    <p class="public-page-lead">Labs and groups with public ingest—combined feeds from the org and linked people.</p>
+  </section>
+  <ul class="public-entity-grid" role="list">
+    {% for o in organizations %}
+      <li>
+        <a href="{{ url_for('public.organization_detail', slug=o.slug) }}" class="public-entity-card">
+          <span class="public-entity-name">{{ o.display_name }}</span>
+          <span class="public-entity-meta">View activity →</span>
+        </a>
+      </li>
+    {% else %}
+      <li class="public-empty">No public organizations yet—approved sources will appear here.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

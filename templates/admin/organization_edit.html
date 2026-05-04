@@ -34,12 +34,16 @@
   </div>
 
   {% if organization %}
-  {% if assoc_place_bootstrap %}
-  <h2 class="source-view-h2">Linked places</h2>
-  <div class="field-group entity-org-places-picker">
-    {% set assoc_picker_bootstrap = assoc_place_bootstrap %}
-    {% set picker_suffix = picker_suffix_place_assoc %}
-    {% include "admin/includes/entity_assoc_tag_picker.html" %}
+  <h2 class="source-view-h2">Building</h2>
+  <div class="field-group">
+    <label class="field-label" for="org-building-id">Home building</label>
+    <select name="building_id" id="org-building-id" class="field-input">
+      <option value="">— None —</option>
+      {% for b in buildings_for_pick %}
+      <option value="{{ b.id }}" {% if organization.building_id == b.id %}selected{% endif %}>{{ b.place_name or b.display_name }}</option>
+      {% endfor %}
+    </select>
+    <p class="field-hint muted">At most one building per organization. Attach more organizations from the building edit page.</p>
   </div>
   {% endif %}
   {% if people %}
@@ -56,7 +60,6 @@
       {% endfor %}
     </tbody>
   </table>
-  {% endif %}
   {% endif %}
 
   {% if organization %}

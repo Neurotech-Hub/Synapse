@@ -1,4 +1,4 @@
-"""Rebuild ``PersonaSnapshot`` for persons, organizations, and places via local Ollama."""
+"""Rebuild ``PersonaSnapshot`` for persons, organizations, and buildings via local Ollama."""
 
 from __future__ import annotations
 

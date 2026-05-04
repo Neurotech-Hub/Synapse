@@ -1,4 +1,4 @@
-"""Multi-step Hub-centric lead report synthesis (person / organization / place)."""
+"""Multi-step Hub-centric lead report synthesis (person / organization / building / region)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from sqlalchemy import desc
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
+from app.domain.entity_associations import organization_ids_for_building
+from app.domain.region_buildings import building_ids_for_region, ensure_region_building_rows
 from app.identity.evidence import gather_content_items_for_person, chunks_for_prompt
 from app.ingest.html_extract import plaintext_excerpt as _plain_excerpt
 from app.ingest.ollama_client import OLLAMA_MODEL, run_lead_report_llm
@@ -25,8 +27,9 @@ from app.leads.lead_report_budgets import (
 )
 from app.leads.prompt_loader import normalize_prompt_body, prompts_dir
 from app.leads.report_progress import set_lead_report_phase
-from app.domain.entity_associations import organization_ids_for_place
 from app.models import ContentItem, LeadPipelineSettings, LeadReport, Person, PersonaSnapshot, person_organization
+
+
 def _report_snippet_block(ci: ContentItem, *, max_chars: int) -> str:
     body = _plain_excerpt((ci.snippet or ""), max_chars).strip()
     lk = ci.link or ""
@@ -60,15 +63,24 @@ def _hub_items_and_block(*, hub_organization_id: int) -> tuple[list[ContentItem]
     return hub_items, blk
 
 
-def _fingerprint_hub_target(*, hub_ids: list[int], target_person_id: int | None, target_organization_id: int | None, target_place_id: int | None) -> str:
+def _fingerprint_hub_target(
+    *,
+    hub_ids: list[int],
+    target_person_id: int | None,
+    target_organization_id: int | None,
+    target_building_id: int | None,
+    target_region_id: int | None,
+) -> str:
     h_part = "|".join(str(i) for i in sorted(set(hub_ids)))
     subj = ""
     if target_person_id is not None:
         subj = f"person:{target_person_id}"
     elif target_organization_id is not None:
         subj = f"organization:{target_organization_id}"
-    elif target_place_id is not None:
-        subj = f"place:{target_place_id}"
+    elif target_building_id is not None:
+        subj = f"building:{target_building_id}"
+    elif target_region_id is not None:
+        subj = f"region:{target_region_id}"
     raw = f"{PIPELINE_SEMVER}|hub:[{h_part}]|tgt:{subj}"
     return sha256(raw.encode()).hexdigest()[:64]
 
@@ -137,20 +149,36 @@ def _normalize_routes(data: dict[str, Any], *, hub_ids: set[int], target_ids: se
     return [r for r in out if r.get("title") or r.get("why")]
 
 
-def _people_roster(*, org_id: int | None, place_id: int | None) -> tuple[list[Person], str]:
-    if org_id is None and place_id is None:
-        return [], ""
+def _organization_ids_for_report(report: LeadReport) -> tuple[list[int], str]:
+    """Organizations whose people roster feeds org/building/region rollup."""
 
-    q = Person.query.join(person_organization)
-    if org_id is not None:
-        q = q.filter(person_organization.c.organization_id == int(org_id))
-    elif place_id is not None:
-        oids = sorted(organization_ids_for_place(int(place_id)))
-        if not oids:
-            return [], "(No organizations linked to this place.)"
-        q = q.filter(person_organization.c.organization_id.in_(oids))
+    if report.target_organization_id is not None:
+        return [int(report.target_organization_id)], f"organization id={report.target_organization_id}"
+    if report.target_building_id is not None:
+        oids = sorted(organization_ids_for_building(int(report.target_building_id)))
+        return oids, f"building id={report.target_building_id}"
+    if report.target_region_id is not None:
+        rid = int(report.target_region_id)
+        ensure_region_building_rows(rid)
+        oids: set[int] = set()
+        for bid in building_ids_for_region(rid):
+            oids |= organization_ids_for_building(int(bid))
+        return sorted(oids), f"region id={rid}"
+    return [], ""
 
-    people = q.distinct().order_by(Person.display_name.asc()).limit(org_place_persona_summaries_cap()).all()
+
+def _people_roster_for_orgs(organization_ids: list[int]) -> tuple[list[Person], str]:
+    if not organization_ids:
+        return [], "(No organizations in scope.)"
+
+    q = (
+        Person.query.join(person_organization)
+        .filter(person_organization.c.organization_id.in_(organization_ids))
+        .distinct()
+        .order_by(Person.display_name.asc())
+        .limit(org_place_persona_summaries_cap())
+    )
+    people = q.all()
 
     lines = [_person_compact_line(p.id) for p in people]
     return people, "\n".join(lines) if lines else "(no affiliated people captured.)"
@@ -196,7 +224,8 @@ def _run_person_report(report: LeadReport, *, hub_org_id: int) -> None:
         hub_ids=sorted(allowed_hub),
         target_person_id=person.id,
         target_organization_id=None,
-        target_place_id=None,
+        target_building_id=None,
+        target_region_id=None,
     )
 
     p1_raw = normalize_prompt_body(
@@ -213,7 +242,6 @@ def _run_person_report(report: LeadReport, *, hub_org_id: int) -> None:
 
     exe = synth.get("executive_summary") if isinstance(synth, dict) else None
     if not isinstance(exe, str) or not exe.strip():
-        # Some models embed prose oddly; salvage JSON string
         exe = json.dumps(synth, ensure_ascii=False)[:32000]
 
     summary_text = exe.strip() or "(Synthesis omitted — model returned unusable prose.)"
@@ -241,17 +269,14 @@ def _hub_content_block_hub_only(hub_org_id: int) -> tuple[list[ContentItem], str
     return _hub_items_and_block(hub_organization_id=int(hub_org_id))
 
 
-def _run_org_place_report(report: LeadReport, *, hub_org_id: int) -> None:
-    if report.target_organization_id is not None:
-        subject_label = f'organization id={report.target_organization_id}'
-        people, roster = _people_roster(org_id=int(report.target_organization_id), place_id=None)
-    elif report.target_place_id is not None:
-        subject_label = f'place id={report.target_place_id}'
-        people, roster = _people_roster(place_id=int(report.target_place_id), org_id=None)
-    else:
-        raise ValueError("Org/Place report expects target_organization_id or target_place_id.")
+def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> None:
+    org_ids, subject_label = _organization_ids_for_report(report)
+    if not subject_label:
+        raise ValueError("Report has no organization, building, or region target.")
 
-    set_lead_report_phase("Organization / place report: gathering Hub + roster…")
+    people, roster = _people_roster_for_orgs(org_ids)
+
+    set_lead_report_phase("Organization / building / region report: gathering Hub + roster…")
     hub_items, hub_block = _hub_items_and_block(hub_organization_id=int(hub_org_id))
     if not hub_items:
         raise ValueError("Hub corpus produced no ingest items — check Hub organization corpus sources.")
@@ -263,7 +288,8 @@ def _run_org_place_report(report: LeadReport, *, hub_org_id: int) -> None:
         hub_ids=sorted(allowed_hub),
         target_person_id=None,
         target_organization_id=report.target_organization_id,
-        target_place_id=report.target_place_id,
+        target_building_id=report.target_building_id,
+        target_region_id=report.target_region_id,
     )
 
     tmpl = normalize_prompt_body(_load_prompt_file("lead_report_organization_place.txt"))
@@ -273,7 +299,7 @@ def _run_org_place_report(report: LeadReport, *, hub_org_id: int) -> None:
         .replace("{{people_roster}}", roster)
     )
 
-    set_lead_report_phase("Organization / place report: rollup (LLM)…")
+    set_lead_report_phase("Organization / building / region report: rollup (LLM)…")
     data = run_lead_report_llm(prompt, json_format=True)
     if data is None or not isinstance(data, dict):
         raise RuntimeError("Organization rollup LLM returned no usable JSON/object.")
@@ -352,8 +378,12 @@ def run_lead_report_job(report_id: int) -> None:
 
         if report.target_person_id is not None:
             _run_person_report(report, hub_org_id=hub_oid)
-        elif report.target_organization_id is not None or report.target_place_id is not None:
-            _run_org_place_report(report, hub_org_id=hub_oid)
+        elif (
+            report.target_organization_id is not None
+            or report.target_building_id is not None
+            or report.target_region_id is not None
+        ):
+            _run_org_building_region_report(report, hub_org_id=hub_oid)
         else:
             raise ValueError("Report has no target subject.")
 
@@ -372,19 +402,25 @@ def enqueue_lead_report(
     hub_organization_id: int | None,
     target_person_id: int | None,
     target_organization_id: int | None,
-    target_place_id: int | None,
+    target_building_id: int | None,
+    target_region_id: int | None,
 ) -> LeadReport:
     """Persist queued report row."""
 
-    one_hot = sum(1 for x in (target_person_id, target_organization_id, target_place_id) if x is not None)
+    one_hot = sum(
+        1
+        for x in (target_person_id, target_organization_id, target_building_id, target_region_id)
+        if x is not None
+    )
     if one_hot != 1:
-        raise ValueError("Exactly one of person/organization/place target ids is required.")
+        raise ValueError("Exactly one of person/organization/building/region target ids is required.")
 
     row = LeadReport(
         hub_organization_id=int(hub_organization_id) if hub_organization_id else None,
         target_person_id=target_person_id,
         target_organization_id=target_organization_id,
-        target_place_id=target_place_id,
+        target_building_id=target_building_id,
+        target_region_id=target_region_id,
         status="queued",
     )
     db.session.add(row)

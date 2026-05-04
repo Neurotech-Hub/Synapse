@@ -1,6 +1,6 @@
 """URL helpers for ingest and admin grouping."""
 
-from app.ingest.urlnorm import canonical_url, origin_section_labels, url_origin_group_key
+from app.ingest.urlnorm import canonical_url, origin_section_labels, stable_catalog_url, url_origin_group_key
 
 
 def test_url_origin_group_key_same_host_different_paths():
@@ -29,3 +29,16 @@ def test_origin_section_labels_shows_host_and_origin():
     title, sub = origin_section_labels("https://example.com")
     assert title == "example.com"
     assert "https" in sub and "example.com" in sub
+
+
+def test_stable_catalog_url_pubmed_strips_tracking():
+    a = "https://pubmed.ncbi.nlm.nih.gov/38293211/?utm_source=Other&utm_medium=rss"
+    b = "https://pubmed.ncbi.nlm.nih.gov/38293211/?fc=1&ff=2&v=2.19.0"
+    want = "https://pubmed.ncbi.nlm.nih.gov/38293211/"
+    assert stable_catalog_url(a) == want
+    assert stable_catalog_url(b) == want
+
+
+def test_stable_catalog_url_doi():
+    u = "https://doi.org/10.1038/s41586-024-07051-9?utm_campaign=feed"
+    assert stable_catalog_url(u) == "https://doi.org/10.1038/s41586-024-07051-9"

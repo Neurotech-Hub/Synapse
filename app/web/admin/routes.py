@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
-from sqlalchemy import and_, desc, func, or_
+from sqlalchemy import and_, desc, func, inspect, or_
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -19,11 +19,16 @@ from app.auth import (
     loopback_auto_login_allowed,
     verify_admin_password,
 )
-from app.domain.entity_associations import sync_organization_places, sync_person_organizations, sync_place_organizations
+from app.domain.entity_associations import (
+    set_organization_building,
+    sync_building_organizations,
+    sync_person_organizations,
+)
+from app.domain.region_buildings import rebuild_region_building_for_building, rebuild_region_building_for_region
 from app.extensions import db
 from app.identity.builder import rebuild_person_identity
 from app.identity.evidence import identity_paper_overlay_days
-from app.identity.rollup import rebuild_organization_persona, rebuild_place_persona
+from app.identity.rollup import rebuild_building_persona, rebuild_organization_persona
 from app.identity.staleness import (
     identity_snapshot_poll_ready,
     list_stale_persona_snapshots,
@@ -33,7 +38,7 @@ from app.identity.staleness import (
     mark_identity_stale_from_xor_change,
     mark_organization_identity_stale,
     mark_person_identity_stale,
-    mark_place_identity_stale,
+    mark_building_identity_stale,
 )
 from app.ingest.ollama_client import ollama_admin_status
 from app.ingest.pipeline import refresh_html_page_content_items
@@ -48,28 +53,46 @@ from app.leads.report_progress import (
     is_lead_report_running,
     start_background_lead_report,
 )
+from app.domain.public_sources import organization_is_publicly_listable, person_is_publicly_listable
 from app.models import (
+    Building,
     ContentItem,
     LeadPipelineSettings,
     LeadReport,
     Organization,
     Person,
     PersonaSnapshot,
-    Place,
     PollLog,
+    PublicActivityDigest,
+    Region,
     Source,
     SourceSnapshot,
-    organization_place as organization_place_tbl,
     person_organization as person_organization_tbl,
+)
+from app.public_digest.build import (
+    build_all_stale_public_digests,
+    build_public_digest_for_organization,
+    build_public_digest_for_person,
+)
+from app.public_feed.curate import (
+    clear_public_feed_curation,
+    count_uncurated_public_feed_candidates,
+)
+from app.public_feed.curate_progress import (
+    is_public_feed_curation_running,
+    public_feed_curation_active_run_id,
+    snapshot_public_feed_curation,
+    start_background_public_feed_curation,
 )
 from app.web.admin import admin_bp
 from app.web.admin.forms import (
+    BuildingForm,
     ContentItemForm,
     LeadPipelineHubForm,
     LoginForm,
     OrganizationForm,
     PersonForm,
-    PlaceForm,
+    RegionForm,
     SourceForm,
     normalize_entity_slug_input,
 )
@@ -87,7 +110,8 @@ def _allocate_unique_slug(
     *,
     exclude_person_id: int | None = None,
     exclude_organization_id: int | None = None,
-    exclude_place_id: int | None = None,
+    exclude_building_id: int | None = None,
+    exclude_region_id: int | None = None,
     max_slug_len: int = 160,
 ) -> str | None:
     nb = (normalized_base or "").strip()
@@ -107,10 +131,15 @@ def _allocate_unique_slug(
             q2 = q2.filter(Organization.id != exclude_organization_id)
         if q2.first():
             return True
-        q3 = Place.query.filter(Place.slug == slug)
-        if exclude_place_id is not None:
-            q3 = q3.filter(Place.id != exclude_place_id)
-        return q3.first() is not None
+        q3 = Building.query.filter(Building.slug == slug)
+        if exclude_building_id is not None:
+            q3 = q3.filter(Building.id != exclude_building_id)
+        if q3.first():
+            return True
+        q4 = Region.query.filter(Region.slug == slug)
+        if exclude_region_id is not None:
+            q4 = q4.filter(Region.id != exclude_region_id)
+        return q4.first() is not None
 
     for suf_i in range(500):
         extra = "" if suf_i == 0 else "_" + str(suf_i + 1)
@@ -164,7 +193,7 @@ def _organization_assoc_picker_initials(
     }
 
 
-def _place_assoc_picker_initials(initial_ids: Iterable[int]) -> dict[str, object]:
+def _building_org_assoc_picker_initials(initial_ids: Iterable[int]) -> dict[str, object]:
     seen: set[int] = set()
     for raw in initial_ids:
         try:
@@ -174,20 +203,20 @@ def _place_assoc_picker_initials(initial_ids: Iterable[int]) -> dict[str, object
         seen.add(i)
     opts = [
         {
-            "id": p.id,
-            "label": (p.place_name or p.display_name or "").strip(),
-            "subtitle": (p.slug or "").strip(),
+            "id": o.id,
+            "label": (o.display_name or "").strip(),
+            "subtitle": (o.slug or "").strip(),
         }
-        for p in Place.query.order_by(Place.place_name.asc()).all()
+        for o in Organization.query.order_by(Organization.display_name.asc()).all()
     ]
     return {
-        "field_name": "place_ids",
+        "field_name": "organization_ids",
         "options": opts,
         "initial": sorted(seen),
-        "empty_chip_text": "No places linked.",
-        "combobox_label": "Linked places",
-        "list_aria_label": "Place matches",
-        "search_placeholder": "Search by place name or slug…",
+        "empty_chip_text": "No organizations at this building.",
+        "combobox_label": "Organizations at this building",
+        "list_aria_label": "Organization matches",
+        "search_placeholder": "Search by organization name or slug…",
     }
 
 
@@ -296,7 +325,7 @@ def dashboard():
         subj_slug = (
             getattr(snapshot.person, "slug", None)
             or getattr(snapshot.organization, "slug", None)
-            or getattr(snapshot.place, "slug", None)
+            or getattr(snapshot.building, "slug", None)
             or ""
         )
         rebuild_url = None
@@ -310,17 +339,17 @@ def dashboard():
             kind = "Organization"
             edit_url = url_for("admin.organizations_edit", oid=snapshot.organization_id)
             rebuild_url = url_for("admin.organizations_refresh_persona", oid=snapshot.organization_id)
-        elif snapshot.place_id is not None:
-            kind = "Place"
-            edit_url = url_for("admin.places_view", plid=snapshot.place_id)
-            rebuild_url = url_for("admin.places_refresh_persona", plid=snapshot.place_id)
+        elif snapshot.building_id is not None:
+            kind = "Building"
+            edit_url = url_for("admin.buildings_view", bid=snapshot.building_id)
+            rebuild_url = url_for("admin.buildings_refresh_persona", bid=snapshot.building_id)
 
         stale_snapshot_rows.append(
             {
                 "kind": kind,
                 "label": getattr(snapshot.person, "display_name", None)
                 or getattr(snapshot.organization, "display_name", None)
-                or getattr(snapshot.place, "display_name", None)
+                or getattr(snapshot.building, "display_name", None)
                 or subj_slug
                 or "—",
                 "slug": subj_slug,
@@ -397,8 +426,10 @@ def identities_refresh_stale_ready():
                 out = rebuild_organization_persona(
                     int(snapshot.organization_id), skip_if_same_fingerprint=False, user_initiated=True
                 )
-            elif snapshot.place_id is not None:
-                out = rebuild_place_persona(int(snapshot.place_id), skip_if_same_fingerprint=False, user_initiated=True)
+            elif snapshot.building_id is not None:
+                out = rebuild_building_persona(
+                    int(snapshot.building_id), skip_if_same_fingerprint=False, user_initiated=True
+                )
             else:
                 continue
             if (out or {}).get("status") == "ok":
@@ -1024,17 +1055,21 @@ def people_delete(pid: int):
 @admin_bp.route("/organizations")
 @login_required
 def organizations_list():
-    rows = Organization.query.options(joinedload(Organization.persona)).all()
+    rows = Organization.query.options(
+        joinedload(Organization.persona), joinedload(Organization.building)
+    ).all()
     pid_count = dict(
         db.session.query(person_organization_tbl.c.organization_id, func.count(person_organization_tbl.c.person_id))
         .group_by(person_organization_tbl.c.organization_id)
         .all()
     )
-    place_count = dict(
-        db.session.query(organization_place_tbl.c.organization_id, func.count(organization_place_tbl.c.place_id))
-        .group_by(organization_place_tbl.c.organization_id)
-        .all()
-    )
+    building_cell: dict[int, str] = {}
+    for o in rows:
+        if o.building_id and o.building:
+            b = o.building
+            building_cell[o.id] = (b.place_name or b.display_name or "").strip() or b.slug
+        else:
+            building_cell[o.id] = ""
     source_count = dict(
         db.session.query(Source.organization_id, func.count(Source.id))
         .filter(Source.organization_id.isnot(None))
@@ -1049,7 +1084,7 @@ def organizations_list():
         "admin/organizations_list.html",
         rows=sorted(rows, key=lambda o: (o.display_name or "").lower()),
         people_counts=pid_count,
-        places_counts=place_count,
+        building_cell=building_cell,
         org_owned_source_counts=source_count,
         hub_organization_id=hub_oid,
         hub_corpus_organization_ids=mark_org_ids,
@@ -1074,6 +1109,7 @@ def organizations_new():
                 hub_organization_id=None,
                 selected_source_ids=[],
                 source_picker_bootstrap={},
+                buildings_for_pick=Building.query.order_by(Building.place_name.asc()).all(),
             ), 400
         row = Organization(slug=slug, display_name=display, notes=form.notes.data or None)
         db.session.add(row)
@@ -1089,6 +1125,7 @@ def organizations_new():
         hub_organization_id=_normalized_hub_organization_id(),
         selected_source_ids=[],
         source_picker_bootstrap={},
+        buildings_for_pick=Building.query.order_by(Building.place_name.asc()).all(),
     )
 
 
@@ -1101,12 +1138,13 @@ def organizations_view_redirect(oid: int):
 @admin_bp.route("/organizations/<int:oid>/edit", methods=("GET", "POST"))
 @login_required
 def organizations_edit(oid: int):
-    org = Organization.query.options(joinedload(Organization.places)).filter_by(id=int(oid)).first()
+    org = Organization.query.options(joinedload(Organization.building)).filter_by(id=int(oid)).first()
     if org is None:
         abort(404)
     snapshot = PersonaSnapshot.query.filter_by(organization_id=oid).first()
     form = OrganizationForm(obj=org)
     all_sources = Source.query.order_by(Source.url.asc()).all()
+    buildings_for_pick = Building.query.order_by(Building.place_name.asc()).all()
 
     def linked_ids() -> set[int]:
         return {r[0] for r in Source.query.with_entities(Source.id).filter(Source.organization_id == oid).all()}
@@ -1117,7 +1155,6 @@ def organizations_edit(oid: int):
         return {"options": opts, "initial": sorted(sel)}
 
     sel = linked_ids()
-    place_sel = sorted({p.id for p in (org.places or [])})
     kw = dict(
         form=form,
         organization=org,
@@ -1133,9 +1170,7 @@ def organizations_edit(oid: int):
             .order_by(Person.display_name.asc())
             .all()
         ),
-        places_linked=sorted(org.places or [], key=lambda p: (p.place_name or "").lower()),
-        assoc_place_bootstrap=_place_assoc_picker_initials(place_sel),
-        picker_suffix_place_assoc="org-place",
+        buildings_for_pick=buildings_for_pick,
         quick_source_form=SourceForm(prefix="quick_src"),
         quick_create_next=url_for("admin.organizations_edit", oid=oid),
         quick_create_owner_person_id=None,
@@ -1154,19 +1189,20 @@ def organizations_edit(oid: int):
             flash("Need a usable display name / slug.", "error")
             return render_template("admin/organization_edit.html", **kw), 400
 
-        prev_place_ids = {p.id for p in (org.places or [])}
+        prev_bid = org.building_id
         prev_sel = linked_ids()
         sid_list = sorted({int(x) for x in request.form.getlist("source_ids") if str(x).isdigit()})
         touched = prev_sel | set(sid_list)
         before_xor = _snapshot_source_xor_map(list(touched))
 
-        plist = sorted({int(x) for x in request.form.getlist("place_ids") if str(x).isdigit()})
+        b_raw = (request.form.get("building_id") or "").strip()
+        new_bid = int(b_raw) if b_raw.isdigit() else None
 
         org.slug = slug
         org.display_name = display
         org.notes = form.notes.data or None
 
-        sync_organization_places(organization=org, place_ids_ordered=plist)
+        set_organization_building(organization=org, building_id=new_bid)
 
         for s in Source.query.filter(Source.organization_id == oid):
             s.organization_id = None
@@ -1178,9 +1214,9 @@ def organizations_edit(oid: int):
         db.session.commit()
 
         mark_identity_stale_for_org_bundle(oid)
-        touched_places = prev_place_ids | {p.id for p in (org.places or [])}
-        for plid in touched_places:
-            mark_place_identity_stale(int(plid))
+        for bid in {x for x in (prev_bid, new_bid) if x is not None}:
+            mark_building_identity_stale(int(bid))
+            rebuild_region_building_for_building(int(bid))
         _mark_stale_for_source_xor_moves(touched_ids=touched, before_xor=before_xor)
         db.session.commit()
         flash("Organization saved.", "success")
@@ -1214,9 +1250,6 @@ def organizations_delete(oid: int):
     if org.people:
         flash("Detach member people before deleting this organization.", "error")
         return redirect(url_for("admin.organizations_edit", oid=oid))
-    if org.places:
-        flash("Detach linked places before deleting this organization.", "error")
-        return redirect(url_for("admin.organizations_edit", oid=oid))
     if Source.query.filter_by(organization_id=oid).first():
         flash("Detach org-owned sources first.", "error")
         return redirect(url_for("admin.organizations_edit", oid=oid))
@@ -1234,32 +1267,32 @@ def organizations_delete(oid: int):
     return redirect(url_for("admin.organizations_list"))
 
 
-# --- Places ---
+# --- Places: buildings & regions ---
 
 
+@admin_bp.route("/buildings")
 @admin_bp.route("/places")
 @login_required
-def places_list():
-    rows = Place.query.options(
-        joinedload(Place.organizations),
-        joinedload(Place.persona),
-    ).all()
+def buildings_list():
+    rows = Building.query.options(joinedload(Building.organizations), joinedload(Building.persona)).all()
 
-    def _place_sort_primary(pl):
-        names = [(o.display_name or "").strip().lower() for o in (pl.organizations or [])]
-        return (names[0] if names else "", (pl.place_name or pl.display_name or "").lower())
+    def _building_sort_primary(b):
+        names = [(o.display_name or "").strip().lower() for o in (b.organizations or [])]
+        return (names[0] if names else "", (b.place_name or b.display_name or "").lower())
 
     return render_template(
-        "admin/places_list.html",
-        rows=sorted(rows, key=_place_sort_primary),
+        "admin/buildings_list.html",
+        rows=sorted(rows, key=_building_sort_primary),
     )
 
 
+@admin_bp.route("/buildings/new", methods=("GET", "POST"))
 @admin_bp.route("/places/new", methods=("GET", "POST"))
 @login_required
-def places_new():
-    form = PlaceForm()
-    assoc_boot = _organization_assoc_picker_initials([], show_slug_subtitle=False)
+def buildings_new():
+    form = BuildingForm()
+    assoc_boot = _building_org_assoc_picker_initials([])
+    regions = Region.query.order_by(Region.region_name.asc()).all()
     if form.validate_on_submit():
         display = (form.display_name.data or "").strip()
         slug_base = normalize_entity_slug_input(display or form.place_name.data)
@@ -1267,53 +1300,63 @@ def places_new():
         if slug is None:
             flash("Could not allocate a unique slug.", "error")
             return render_template(
-                "admin/place_detail.html",
+                "admin/building_detail.html",
                 form=form,
-                place=None,
+                building=None,
                 identity_row=None,
                 hub_organization_id=_normalized_hub_organization_id(),
                 map_latitude=None,
                 map_longitude=None,
                 assoc_picker_bootstrap=assoc_boot,
-                picker_suffix_entity_assoc="place-org",
+                picker_suffix_entity_assoc="building-org",
+                regions=regions,
             ), 400
         oid_ordered = sorted({int(x) for x in request.form.getlist("organization_ids") if str(x).isdigit()})
-        pl = Place(
+        rr = (request.form.get("region_id") or "").strip()
+        region_id = int(rr) if rr.isdigit() else None
+        if region_id is not None and db.session.get(Region, region_id) is None:
+            region_id = None
+        pl = Building(
             slug=slug,
             display_name=display or form.place_name.data,
             place_name=(form.place_name.data or "").strip(),
             latitude=float(form.latitude.data),
             longitude=float(form.longitude.data),
             notes=form.notes.data or None,
+            region_id=region_id,
         )
         db.session.add(pl)
         db.session.flush()
-        sync_place_organizations(place=pl, organization_ids_ordered=oid_ordered)
+        sync_building_organizations(building=pl, organization_ids_ordered=oid_ordered)
         db.session.commit()
-        flash("Place created.", "success")
-        return redirect(url_for("admin.places_view", plid=pl.id))
+        rebuild_region_building_for_building(int(pl.id))
+        flash("Building created.", "success")
+        return redirect(url_for("admin.buildings_view", bid=pl.id))
 
     return render_template(
-        "admin/place_detail.html",
+        "admin/building_detail.html",
         form=form,
-        place=None,
+        building=None,
         identity_row=None,
         hub_organization_id=_normalized_hub_organization_id(),
         map_latitude=None,
         map_longitude=None,
         assoc_picker_bootstrap=assoc_boot,
-        picker_suffix_entity_assoc="place-org",
+        picker_suffix_entity_assoc="building-org",
+        regions=regions,
     )
 
 
-@admin_bp.route("/places/<int:plid>", methods=("GET", "POST"))
+@admin_bp.route("/buildings/<int:bid>", methods=("GET", "POST"))
+@admin_bp.route("/places/<int:bid>", methods=("GET", "POST"))
 @login_required
-def places_view(plid: int):
-    pl = Place.query.options(joinedload(Place.organizations)).filter_by(id=int(plid)).first()
+def buildings_view(bid: int):
+    pl = Building.query.options(joinedload(Building.organizations)).filter_by(id=int(bid)).first()
     if pl is None:
         abort(404)
-    snapshot = PersonaSnapshot.query.filter_by(place_id=plid).first()
-    form = PlaceForm(obj=pl)
+    snapshot = PersonaSnapshot.query.filter_by(building_id=bid).first()
+    form = BuildingForm(obj=pl)
+    regions = Region.query.order_by(Region.region_name.asc()).all()
 
     linked_org_ids = sorted({o.id for o in (pl.organizations or [])})
 
@@ -1326,23 +1369,24 @@ def places_view(plid: int):
 
     if form.validate_on_submit():
         prev_org_ids = {o.id for o in (pl.organizations or [])}
+        prev_lat, prev_lng = pl.latitude, pl.longitude
+        prev_rid = pl.region_id
         display = (form.display_name.data or "").strip()
         slug_base = normalize_entity_slug_input(display or form.place_name.data)
-        slug = _allocate_unique_slug(slug_base, exclude_place_id=plid)
+        slug = _allocate_unique_slug(slug_base, exclude_building_id=bid)
         if slug is None:
             flash("Could not allocate a unique slug.", "error")
             return render_template(
-                "admin/place_detail.html",
+                "admin/building_detail.html",
                 form=form,
-                place=pl,
+                building=pl,
                 identity_row=snapshot,
                 hub_organization_id=_normalized_hub_organization_id(),
                 map_latitude=pl.latitude,
                 map_longitude=pl.longitude,
-                assoc_picker_bootstrap=_organization_assoc_picker_initials(
-                    linked_org_ids, show_slug_subtitle=False
-                ),
-                picker_suffix_entity_assoc="place-org",
+                assoc_picker_bootstrap=_building_org_assoc_picker_initials(linked_org_ids),
+                picker_suffix_entity_assoc="building-org",
+                regions=regions,
             ), 400
         oid_ordered = sorted({int(x) for x in request.form.getlist("organization_ids") if str(x).isdigit()})
 
@@ -1352,62 +1396,157 @@ def places_view(plid: int):
         pl.latitude = float(form.latitude.data)
         pl.longitude = float(form.longitude.data)
         pl.notes = form.notes.data or None
+        rr = (request.form.get("region_id") or "").strip()
+        new_rid = int(rr) if rr.isdigit() else None
+        if new_rid is not None and db.session.get(Region, new_rid) is None:
+            new_rid = None
+        pl.region_id = new_rid
 
-        sync_place_organizations(place=pl, organization_ids_ordered=oid_ordered)
+        sync_building_organizations(building=pl, organization_ids_ordered=oid_ordered)
 
         db.session.flush()
         new_org_ids = {o.id for o in (pl.organizations or [])}
 
         db.session.commit()
-        mark_place_identity_stale(plid)
+        mark_building_identity_stale(bid)
         for oid in prev_org_ids.symmetric_difference(new_org_ids):
             mark_identity_stale_for_org_bundle(int(oid))
+        rebuild_region_building_for_building(int(bid))
+        if prev_rid != pl.region_id or prev_lat != pl.latitude or prev_lng != pl.longitude:
+            for rid in {x for x in (prev_rid, pl.region_id) if x is not None}:
+                rebuild_region_building_for_region(int(rid))
         db.session.commit()
-        flash("Place saved.", "success")
-        return redirect(url_for("admin.places_view", plid=plid))
+        flash("Building saved.", "success")
+        return redirect(url_for("admin.buildings_view", bid=bid))
 
     return render_template(
-        "admin/place_detail.html",
+        "admin/building_detail.html",
         form=form,
-        place=pl,
+        building=pl,
         identity_row=snapshot,
         hub_organization_id=_normalized_hub_organization_id(),
         map_latitude=float(pl.latitude),
         map_longitude=float(pl.longitude),
-        assoc_picker_bootstrap=_organization_assoc_picker_initials(
-            linked_org_ids, show_slug_subtitle=False
-        ),
-        picker_suffix_entity_assoc="place-org",
+        assoc_picker_bootstrap=_building_org_assoc_picker_initials(linked_org_ids),
+        picker_suffix_entity_assoc="building-org",
+        regions=regions,
     )
 
 
-@admin_bp.route("/places/<int:plid>/refresh-persona", methods=("POST",))
+@admin_bp.route("/buildings/<int:bid>/refresh-persona", methods=("POST",))
+@admin_bp.route("/places/<int:bid>/refresh-persona", methods=("POST",))
 @login_required
-def places_refresh_persona(plid: int):
-    if db.session.get(Place, plid) is None:
+def buildings_refresh_persona(bid: int):
+    if db.session.get(Building, bid) is None:
         abort(404)
-    outcome = rebuild_place_persona(plid, skip_if_same_fingerprint=False, user_initiated=True)
+    outcome = rebuild_building_persona(bid, skip_if_same_fingerprint=False, user_initiated=True)
     lvl = "success" if outcome.get("status") == "ok" else "info"
     flash(outcome.get("detail") or outcome.get("status") or "done", lvl)
     nxt = _safe_admin_redirect_target()
     if nxt:
         return redirect(nxt)
-    return redirect(url_for("admin.places_view", plid=plid))
+    return redirect(url_for("admin.buildings_view", bid=bid))
 
 
-@admin_bp.route("/places/<int:plid>/delete", methods=("POST",))
+@admin_bp.route("/buildings/<int:bid>/delete", methods=("POST",))
+@admin_bp.route("/places/<int:bid>/delete", methods=("POST",))
 @login_required
-def places_delete(plid: int):
-    pl = db.session.get(Place, plid)
+def buildings_delete(bid: int):
+    pl = db.session.get(Building, bid)
     if pl is None:
         abort(404)
-    if LeadReport.query.filter_by(target_place_id=plid).first():
-        flash("Delete lead reports targeting this place first.", "error")
-        return redirect(url_for("admin.places_view", plid=plid))
+    if Organization.query.filter_by(building_id=bid).first():
+        flash("Reassign or clear organizations linked to this building first.", "error")
+        return redirect(url_for("admin.buildings_view", bid=bid))
+    if LeadReport.query.filter_by(target_building_id=bid).first():
+        flash("Delete lead reports targeting this building first.", "error")
+        return redirect(url_for("admin.buildings_view", bid=bid))
     db.session.delete(pl)
     db.session.commit()
-    flash("Place deleted.", "info")
-    return redirect(url_for("admin.places_list"))
+    flash("Building deleted.", "info")
+    return redirect(url_for("admin.buildings_list"))
+
+
+@admin_bp.route("/regions")
+@login_required
+def regions_list():
+    rows = Region.query.order_by(Region.region_name.asc()).all()
+    return render_template("admin/regions_list.html", rows=rows)
+
+
+@admin_bp.route("/regions/new", methods=("GET", "POST"))
+@login_required
+def regions_new():
+    form = RegionForm()
+    if form.validate_on_submit():
+        name = (form.region_name.data or "").strip()
+        slug_base = normalize_entity_slug_input(name)
+        slug = _allocate_unique_slug(slug_base or normalize_entity_slug_input(name))
+        if slug is None:
+            flash("Could not allocate a unique slug.", "error")
+            return render_template("admin/region_detail.html", form=form, region=None), 400
+        r = Region(
+            slug=slug,
+            region_name=name,
+            geojson=(form.geojson.data or "").strip() or None,
+            notes=form.notes.data or None,
+        )
+        db.session.add(r)
+        db.session.commit()
+        rebuild_region_building_for_region(int(r.id))
+        flash("Region created.", "success")
+        return redirect(url_for("admin.regions_view", rid=r.id))
+
+    return render_template("admin/region_detail.html", form=form, region=None)
+
+
+@admin_bp.route("/regions/<int:rid>", methods=("GET", "POST"))
+@login_required
+def regions_view(rid: int):
+    reg = db.session.get(Region, int(rid))
+    if reg is None:
+        abort(404)
+    form = RegionForm(obj=reg)
+    if request.method == "GET":
+        form.region_name.data = reg.region_name
+        form.geojson.data = reg.geojson or ""
+        form.notes.data = reg.notes or ""
+
+    if form.validate_on_submit():
+        name = (form.region_name.data or "").strip()
+        slug_base = normalize_entity_slug_input(name)
+        slug = _allocate_unique_slug(slug_base, exclude_region_id=rid)
+        if slug is None:
+            flash("Could not allocate a unique slug.", "error")
+            return render_template("admin/region_detail.html", form=form, region=reg), 400
+        reg.slug = slug
+        reg.region_name = name
+        reg.geojson = (form.geojson.data or "").strip() or None
+        reg.notes = form.notes.data or None
+        db.session.commit()
+        rebuild_region_building_for_region(int(rid))
+        flash("Region saved.", "success")
+        return redirect(url_for("admin.regions_view", rid=rid))
+
+    return render_template("admin/region_detail.html", form=form, region=reg)
+
+
+@admin_bp.route("/regions/<int:rid>/delete", methods=("POST",))
+@login_required
+def regions_delete(rid: int):
+    reg = db.session.get(Region, int(rid))
+    if reg is None:
+        abort(404)
+    if Building.query.filter_by(region_id=rid).first():
+        flash("Clear region assignment from buildings that reference this region first.", "error")
+        return redirect(url_for("admin.regions_view", rid=rid))
+    if LeadReport.query.filter_by(target_region_id=rid).first():
+        flash("Delete lead reports targeting this region first.", "error")
+        return redirect(url_for("admin.regions_view", rid=rid))
+    db.session.delete(reg)
+    db.session.commit()
+    flash("Region deleted.", "info")
+    return redirect(url_for("admin.regions_list"))
 
 
 # --- Leads ---
@@ -1418,8 +1557,11 @@ def _lead_report_subject_label(r: LeadReport) -> str:
         return f"Person · {r.target_person.display_name}"
     if r.target_organization_id and r.target_organization:
         return f"Organization · {r.target_organization.display_name}"
-    if r.target_place_id and r.target_place:
-        return f"Place · {r.target_place.place_name or r.target_place.display_name}"
+    if r.target_building_id and r.target_building:
+        b = r.target_building
+        return f"Building · {b.place_name or b.display_name}"
+    if r.target_region_id and r.target_region:
+        return f"Region · {r.target_region.region_name}"
     return "—"
 
 
@@ -1428,7 +1570,8 @@ def _lead_reports_filtered_query(review: str | None):
         LeadReport.query.options(
             joinedload(LeadReport.target_person),
             joinedload(LeadReport.target_organization),
-            joinedload(LeadReport.target_place),
+            joinedload(LeadReport.target_building),
+            joinedload(LeadReport.target_region),
             joinedload(LeadReport.hub_organization),
         )
         .order_by(desc(LeadReport.created_at))
@@ -1461,7 +1604,8 @@ def leads_list():
     )
     people = Person.query.order_by(Person.display_name.asc()).all()
     orgs = Organization.query.order_by(Organization.display_name.asc()).all()
-    places = Place.query.order_by(Place.place_name.asc()).all()
+    buildings = Building.query.order_by(Building.place_name.asc()).all()
+    regions = Region.query.order_by(Region.region_name.asc()).all()
     hub_choices_modal = [("", "(default: Hub corpus org under Leads)")] + [
         (str(o.id), o.display_name) for o in Organization.query.order_by(Organization.display_name.asc()).all()
     ]
@@ -1474,7 +1618,8 @@ def leads_list():
         report_review_filter=report_review,
         people=people,
         organizations=orgs,
-        places=places,
+        buildings=buildings,
+        regions=regions,
         default_hub_organization_id=singleton.hub_organization_id,
         hub_choices_modal=hub_choices_modal,
         open_report_modal=open_report_modal,
@@ -1525,11 +1670,13 @@ def lead_reports_new():
     sk = (request.form.get("subject_kind") or "").strip().lower()
     pr_raw = (request.form.get("target_person_id") or "").strip()
     or_raw = (request.form.get("target_organization_id") or "").strip()
-    pl_raw = (request.form.get("target_place_id") or "").strip()
+    b_raw = (request.form.get("target_building_id") or "").strip()
+    rg_raw = (request.form.get("target_region_id") or "").strip()
 
     tp_id = int(pr_raw) if pr_raw.isdigit() else None
     to_id = int(or_raw) if or_raw.isdigit() else None
-    tpl_id = int(pl_raw) if pl_raw.isdigit() else None
+    tb_id = int(b_raw) if b_raw.isdigit() else None
+    tr_id = int(rg_raw) if rg_raw.isdigit() else None
 
     try:
         if sk == "person" and tp_id is not None:
@@ -1537,21 +1684,32 @@ def lead_reports_new():
                 hub_organization_id=hub_override,
                 target_person_id=tp_id,
                 target_organization_id=None,
-                target_place_id=None,
+                target_building_id=None,
+                target_region_id=None,
             )
         elif sk == "organization" and to_id is not None:
             row = enqueue_lead_report(
                 hub_organization_id=hub_override,
                 target_person_id=None,
                 target_organization_id=to_id,
-                target_place_id=None,
+                target_building_id=None,
+                target_region_id=None,
             )
-        elif sk == "place" and tpl_id is not None:
+        elif sk == "building" and tb_id is not None:
             row = enqueue_lead_report(
                 hub_organization_id=hub_override,
                 target_person_id=None,
                 target_organization_id=None,
-                target_place_id=tpl_id,
+                target_building_id=tb_id,
+                target_region_id=None,
+            )
+        elif sk == "region" and tr_id is not None:
+            row = enqueue_lead_report(
+                hub_organization_id=hub_override,
+                target_person_id=None,
+                target_organization_id=None,
+                target_building_id=None,
+                target_region_id=tr_id,
             )
         else:
             flash("Pick subject type and a matching entity.", "error")
@@ -1581,7 +1739,8 @@ def lead_reports_view(rid: int):
         LeadReport.query.options(
             joinedload(LeadReport.target_person),
             joinedload(LeadReport.target_organization),
-            joinedload(LeadReport.target_place),
+            joinedload(LeadReport.target_building),
+            joinedload(LeadReport.target_region),
             joinedload(LeadReport.hub_organization),
         )
         .filter_by(id=int(rid))
@@ -1712,6 +1871,7 @@ def items_edit(iid: int):
         item.title = form.title.data
         item.link = form.link.data
         item.snippet = form.snippet.data
+        clear_public_feed_curation(item)
         db.session.commit()
         flash("Content item updated.", "success")
         return redirect(url_for("admin.items_list", source_id=item.source_id))
@@ -1729,3 +1889,171 @@ def items_delete(iid: int):
     db.session.commit()
     flash("Content item deleted.", "info")
     return redirect(url_for("admin.items_list", source_id=src_id))
+
+
+_DIGEST_TABLE = "public_activity_digest"
+
+
+def _public_feed_curation_schema_ready() -> bool:
+    try:
+        cols = {c["name"] for c in inspect(db.engine).get_columns("content_item")}
+        return "public_feed_verdict" in cols
+    except Exception:
+        return False
+
+
+def _public_digest_schema_ready() -> bool:
+    """True when Alembic revision ``c8d9e0f1a2b3`` (or equivalent) has been applied."""
+
+    try:
+        return bool(inspect(db.engine).has_table(_DIGEST_TABLE))
+    except Exception:
+        return False
+
+
+def _digest_schema_redirect():
+    flash(
+        "Database is missing digest tables. From the project root run: "
+        "flask --app run:app db upgrade",
+        "error",
+    )
+    return redirect(url_for("admin.dashboard"))
+
+
+@admin_bp.route("/digest")
+@login_required
+def digest_index():
+    if not _public_digest_schema_ready():
+        return _digest_schema_redirect()
+    last_person = dict(
+        db.session.query(PublicActivityDigest.person_id, func.max(PublicActivityDigest.completed_at))
+        .filter(PublicActivityDigest.person_id.isnot(None), PublicActivityDigest.status == "ok")
+        .group_by(PublicActivityDigest.person_id)
+        .all()
+    )
+    last_org = dict(
+        db.session.query(PublicActivityDigest.organization_id, func.max(PublicActivityDigest.completed_at))
+        .filter(PublicActivityDigest.organization_id.isnot(None), PublicActivityDigest.status == "ok")
+        .group_by(PublicActivityDigest.organization_id)
+        .all()
+    )
+    rows: list[dict[str, object]] = []
+    for p in Person.query.order_by(Person.display_name.asc()).all():
+        if not person_is_publicly_listable(p.id) and not p.public_digest_stale:
+            continue
+        rows.append(
+            {
+                "kind": "person",
+                "id": p.id,
+                "name": p.display_name,
+                "slug": p.slug,
+                "stale": bool(p.public_digest_stale),
+                "last_at": last_person.get(p.id),
+                "build_url": url_for("admin.digest_build_person", pid=p.id),
+            }
+        )
+    for o in Organization.query.order_by(Organization.display_name.asc()).all():
+        if not organization_is_publicly_listable(o.id) and not o.public_digest_stale:
+            continue
+        rows.append(
+            {
+                "kind": "organization",
+                "id": o.id,
+                "name": o.display_name,
+                "slug": o.slug,
+                "stale": bool(o.public_digest_stale),
+                "last_at": last_org.get(o.id),
+                "build_url": url_for("admin.digest_build_organization", oid=o.id),
+            }
+        )
+    rows.sort(key=lambda r: (not bool(r["stale"]), str(r.get("name") or "").lower()))
+    feed_ready = _public_feed_curation_schema_ready()
+    pending_feed = int(count_uncurated_public_feed_candidates()) if feed_ready else 0
+    feed_busy = is_public_feed_curation_running() if feed_ready else False
+    feed_active_rid = public_feed_curation_active_run_id() if feed_ready else None
+    return render_template(
+        "admin/digest_index.html",
+        rows=rows,
+        public_feed_curation_schema_ready=feed_ready,
+        public_feed_pending_count=pending_feed,
+        feed_curate_busy=feed_busy,
+        feed_curate_active_run_id=feed_active_rid,
+    )
+
+
+@admin_bp.route("/digest/public-feed-curate-status")
+@login_required
+def digest_public_feed_curate_status():
+    run_id = (request.args.get("run_id") or "").strip()
+    data = snapshot_public_feed_curation(run_id)
+    if data is None:
+        return jsonify({"error": "unknown_run"}), 404
+    schema_ok = _public_feed_curation_schema_ready()
+    pending = int(count_uncurated_public_feed_candidates()) if schema_ok else None
+    return jsonify({**data, "pending_count_live": pending})
+
+
+@admin_bp.route("/digest/curate-public-feed", methods=("POST",))
+@login_required
+def digest_curate_public_feed():
+    if not _public_digest_schema_ready():
+        return _digest_schema_redirect()
+    if not _public_feed_curation_schema_ready():
+        flash(
+            "Database is missing public feed curation columns. From the project root run: "
+            "flask --app run:app db upgrade",
+            "error",
+        )
+        return redirect(url_for("admin.digest_index"))
+    run_id, err = start_background_public_feed_curation(current_app._get_current_object())
+    if err == "busy":
+        flash("Public feed curation is already running. Watch the progress panel or refresh this page.", "error")
+        return redirect(url_for("admin.digest_index"))
+    if err == "thread_start_failed":
+        flash("Could not start the curation task. Try again or restart the server.", "error")
+        return redirect(url_for("admin.digest_index"))
+    return redirect(url_for("admin.digest_index", feed_curate_run=run_id))
+
+
+@admin_bp.route("/digest/build-all", methods=("POST",))
+@login_required
+def digest_build_all():
+    if not _public_digest_schema_ready():
+        return _digest_schema_redirect()
+    out = build_all_stale_public_digests(commit=True)
+    flash(f"Digest batch finished ({out['processed']} run(s)).", "info")
+    return redirect(url_for("admin.digest_index"))
+
+
+@admin_bp.route("/digest/build-person/<int:pid>", methods=("POST",))
+@login_required
+def digest_build_person(pid: int):
+    if not _public_digest_schema_ready():
+        return _digest_schema_redirect()
+    r = build_public_digest_for_person(pid, commit=True)
+    if r["status"] == "error":
+        flash(r.get("detail") or "Build failed.", "error")
+    elif r["status"] == "skipped":
+        flash("Digest skipped (unchanged vs last published fingerprint).", "info")
+    elif r["status"] == "failed":
+        flash("Digest build failed (model JSON). Check latest digest row.", "error")
+    else:
+        flash("Person digest built.", "success")
+    return redirect(url_for("admin.digest_index"))
+
+
+@admin_bp.route("/digest/build-organization/<int:oid>", methods=("POST",))
+@login_required
+def digest_build_organization(oid: int):
+    if not _public_digest_schema_ready():
+        return _digest_schema_redirect()
+    r = build_public_digest_for_organization(oid, commit=True)
+    if r["status"] == "error":
+        flash(r.get("detail") or "Build failed.", "error")
+    elif r["status"] == "skipped":
+        flash("Digest skipped (unchanged vs last published fingerprint).", "info")
+    elif r["status"] == "failed":
+        flash("Digest build failed (model JSON). Check latest digest row.", "error")
+    else:
+        flash("Organization digest built.", "success")
+    return redirect(url_for("admin.digest_index"))

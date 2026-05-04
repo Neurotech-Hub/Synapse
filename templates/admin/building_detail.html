@@ -1,0 +1,132 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% import "admin/includes/form_macros.html" as fm %}
+{% block head_extra %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+{% endblock %}
+{% block title %}{% if building %}Edit building — {{ building.place_name }}{% else %}New building{% endif %}{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>{% if building %}Edit building{% else %}New building{% endif %}</h1>
+  <div class="page-head-actions">
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_place_edit.html" %}{% endcall %}
+  </div>
+</header>
+
+<div class="place-detail-layout{% if building %} place-detail-layout--two{% endif %}">
+  <div class="place-detail-main">
+
+{% if building %}
+{% set subject_title = building.place_name %}
+{% set refresh_endpoint = url_for('admin.buildings_refresh_persona', bid=building.id) %}
+{% include "admin/includes/rollup_persona_panel.html" %}
+{% endif %}
+
+<form method="post" class="admin-form" id="place-edit-form">
+  {{ form.hidden_tag() }}
+  <div class="field-group">
+    {{ form.place_name.label(class_='field-label') }}
+    {{ form.place_name(class_='field-input', size=72) }}
+    {{ fm.field_errors(form.place_name) }}
+  </div>
+  <div class="field-group">
+    {{ form.display_name.label(class_='field-label') }}
+    {{ form.display_name(class_='field-input field-input-prominent', id='entity-display-name', size=72) }}
+    <p id="entity-slug-live" class="entity-slug-live mono muted" aria-live="polite">Slug preview: —</p>
+    {{ fm.field_errors(form.display_name) }}
+  </div>
+  <div class="field-grid-2">
+    <div class="field-group">
+      {{ form.latitude.label(class_='field-label') }}
+      {{ form.latitude(class_='field-input', id='latitude') }}
+      {{ fm.field_errors(form.latitude) }}
+    </div>
+    <div class="field-group">
+      {{ form.longitude.label(class_='field-label') }}
+      {{ form.longitude(class_='field-input', id='longitude') }}
+      {{ fm.field_errors(form.longitude) }}
+    </div>
+  </div>
+  {% if regions is defined %}
+  <div class="field-group">
+    <label class="field-label" for="building-region-id">Region (optional)</label>
+    <select name="region_id" id="building-region-id" class="field-input">
+      <option value="">— None —</option>
+      {% for r in regions %}
+      <option value="{{ r.id }}" {% if building and building.region_id == r.id %}selected{% endif %}>{{ r.region_name }}</option>
+      {% endfor %}
+    </select>
+    <p class="field-hint muted">Explicit assignment; polygon containment also links buildings to regions.</p>
+  </div>
+  {% endif %}
+  <div class="field-group entity-place-orgs-field-group">
+    {% include "admin/includes/entity_assoc_tag_picker.html" %}
+  </div>
+  <div class="field-group">
+    {{ form.notes.label(class_='field-label') }}
+    {{ form.notes(class_='field-input field-input-multiline', rows=5, cols=72) }}
+    {{ fm.field_errors(form.notes) }}
+  </div>
+  {% if building %}
+  <div class="form-submit-row">
+    <div class="form-submit-primary-actions">
+      {{ form.submit(class_='primary-btn') }}
+      <button type="submit" class="danger-btn" formaction="{{ url_for('admin.buildings_delete', bid=building.id) }}" formmethod="post" formnovalidate onclick="return confirm('Delete this building?');">Delete building</button>
+    </div>
+  </div>
+  {% else %}
+  <div class="form-submit-row">{{ form.submit(class_='primary-btn') }}</div>
+  {% endif %}
+</form>
+
+<p class="admin-form-foot"><a href="{{ url_for('admin.buildings_list') }}" class="back-link">&larr; All buildings</a></p>
+
+{% include "admin/includes/entity_display_slug_live.html" %}
+
+  </div>
+
+  {% if building and map_latitude is not none and map_longitude is not none %}
+  <aside class="place-detail-map-card" aria-label="Map">
+    <div id="place-map-host" style="width:100%;height:280px;border-radius:8px;overflow:hidden;"></div>
+    <p class="muted contextual-note" style="margin-top:8px;font-size:.85rem">Drag map after editing lat/lng, then Save.</p>
+  </aside>
+  {% endif %}
+</div>
+
+{% if building and map_latitude is not none and map_longitude is not none %}
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  var lat = Number({{ map_latitude | tojson }});
+  var lng = Number({{ map_longitude | tojson }});
+  if (!isFinite(lat) || !isFinite(lng)) return;
+  var el = document.getElementById("place-map-host");
+  if (!el || typeof L === "undefined") return;
+  var map = L.map(el, { attributionControl: true, zoomControl: true });
+  map.setView([lat, lng], lat === 0 && lng === 0 ? 2 : 14);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+  var marker = L.marker([lat, lng]).addTo(map);
+  var latField = document.getElementById("latitude");
+  var lngField = document.getElementById("longitude");
+  if (latField && lngField) {
+    map.on("moveend", function () {
+      var c = map.getCenter();
+      latField.value = c.lat.toFixed(6);
+      lngField.value = c.lng.toFixed(6);
+      marker.setLatLng(c);
+    });
+    function applyInputsToMap() {
+      var la = parseFloat(latField.value);
+      var ln = parseFloat(lngField.value);
+      if (isFinite(la) && isFinite(ln)) {
+        map.setView([la, ln], Math.max(map.getZoom(), 12));
+        marker.setLatLng([la, ln]);
+      }
+    }
+    latField.addEventListener("change", applyInputsToMap);
+    lngField.addEventListener("change", applyInputsToMap);
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

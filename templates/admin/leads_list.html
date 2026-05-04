@@ -82,7 +82,8 @@
           <legend class="field-label field-label-block">Subject</legend>
           <label class="field-check-label"><input type="radio" name="subject_kind" value="person" checked class="field-check-input lr-sk"/> Person</label>
           <label class="field-check-label"><input type="radio" name="subject_kind" value="organization" class="field-check-input lr-sk"/> Organization</label>
-          <label class="field-check-label"><input type="radio" name="subject_kind" value="place" class="field-check-input lr-sk"/> Place</label>
+          <label class="field-check-label"><input type="radio" name="subject_kind" value="building" class="field-check-input lr-sk"/> Building</label>
+          <label class="field-check-label"><input type="radio" name="subject_kind" value="region" class="field-check-input lr-sk"/> Region</label>
         </fieldset>
 
         <div class="field-group lr-wrap" id="lr-wrap-person">
@@ -99,11 +100,18 @@
             {% for o in organizations %}<option value="{{ o.id }}">{{ o.display_name }}</option>{% endfor %}
           </select>
         </div>
-        <div class="field-group lr-wrap" id="lr-wrap-place" hidden style="display:none;">
-          <label class="field-label" for="lr-place">Place</label>
-          <select name="target_place_id" id="lr-place" class="field-input">
+        <div class="field-group lr-wrap" id="lr-wrap-building" hidden style="display:none;">
+          <label class="field-label" for="lr-building">Building</label>
+          <select name="target_building_id" id="lr-building" class="field-input">
             <option value="">—</option>
-            {% for pl in places %}<option value="{{ pl.id }}">{{ pl.place_name or pl.display_name }}</option>{% endfor %}
+            {% for pl in buildings %}<option value="{{ pl.id }}">{{ pl.place_name or pl.display_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field-group lr-wrap" id="lr-wrap-region" hidden style="display:none;">
+          <label class="field-label" for="lr-region">Region</label>
+          <select name="target_region_id" id="lr-region" class="field-input">
+            <option value="">—</option>
+            {% for rg in regions %}<option value="{{ rg.id }}">{{ rg.region_name }}</option>{% endfor %}
           </select>
         </div>
 
@@ -146,7 +154,8 @@
       <td class="muted">
         {% if r.target_person %}person · {{ r.target_person.display_name }}
         {% elif r.target_organization %}org · {{ r.target_organization.display_name }}
-        {% elif r.target_place %}place · {{ r.target_place.place_name or r.target_place.display_name }}
+        {% elif r.target_building %}building · {{ r.target_building.place_name or r.target_building.display_name }}
+        {% elif r.target_region %}region · {{ r.target_region.region_name }}
         {% else %}—{% endif %}
       </td>
       <td class="muted">{{ r.hub_organization.display_name if r.hub_organization else '(from settings)' }}</td>
@@ -210,7 +219,7 @@
       document.querySelectorAll(".lr-sk").forEach(function (r) {
         if (r.checked) k = r.value;
       });
-      [["person","lr-wrap-person"],["organization","lr-wrap-organization"],["place","lr-wrap-place"]].forEach(function (pair) {
+      [["person","lr-wrap-person"],["organization","lr-wrap-organization"],["building","lr-wrap-building"],["region","lr-wrap-region"]].forEach(function (pair) {
         var el = document.getElementById(pair[1]);
         if (!el) return;
         var show = pair[0] === k;

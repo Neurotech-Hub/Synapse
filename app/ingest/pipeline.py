@@ -15,11 +15,18 @@ from datetime import datetime, timezone
 from sqlalchemy import desc
 
 from app.extensions import db
-from app.ingest.html_extract import extract_snapshot_text, plaintext_excerpt
+from app.ingest.html_extract import (
+    extract_snapshot_text_main_preferred,
+    html_poll_content_external_id,
+    plaintext_excerpt,
+)
 from app.ingest.ollama_client import html_page_llm_prompt_char_budget, try_summarize_html_page
 from app.ingest.rss import fetch_feed, iter_entries
+from app.ingest.urlnorm import stable_catalog_url
 from app.identity.staleness import mark_identity_stale_from_xor_change
 from app.models import ContentItem, PollLog, Source, SourceSnapshot
+from app.public_feed.curate import clear_public_feed_curation
+from app.public_digest.staleness import apply_public_digest_stale_flags, collect_stale_targets_for_source
 
 _SSL = ssl.create_default_context()
 
@@ -33,7 +40,7 @@ def _fetch_source_url_body(url: str) -> bytes:
 def _compute_html_page_title_snippet(url: str, body: bytes) -> tuple[str, str]:
     """HTML body → ingest title/snippet (extract + optional LLM), matching normal poll behavior."""
 
-    title_guess, plain = extract_snapshot_text(body)
+    title_guess, plain = extract_snapshot_text_main_preferred(body)
     prompt_budget = html_page_llm_prompt_char_budget()
     excerpt_for_llm = plaintext_excerpt(plain, prompt_budget)
 
@@ -60,7 +67,7 @@ def _compute_html_page_title_snippet(url: str, body: bytes) -> tuple[str, str]:
 
 
 def refresh_html_page_content_item(source: Source, *, commit: bool = True) -> dict[str, Any]:
-    """Fetch URL and UPSERT ``ContentItem`` title/snippet for ``sha256:`` dedupe key.
+    """Fetch URL and UPSERT ``ContentItem`` title/snippet for semantic ``mainsha:`` dedupe key.
 
     Skips inserting ``SourceSnapshot`` rows so poll timeline stays unchanged while text is regenerated.
 
@@ -91,7 +98,7 @@ def refresh_html_page_content_item(source: Source, *, commit: bool = True) -> di
         }
 
     h = hashlib.sha256(body).hexdigest()
-    ext_id = f"sha256:{h}"
+    ext_id = html_poll_content_external_id(body)
     ci_title, ci_snippet = _compute_html_page_title_snippet(source.url, body)
 
     existing = ContentItem.query.filter_by(source_id=sid, external_id=ext_id).first()
@@ -99,6 +106,7 @@ def refresh_html_page_content_item(source: Source, *, commit: bool = True) -> di
         existing.title = ci_title
         existing.link = source.url
         existing.snippet = ci_snippet or None
+        clear_public_feed_curation(existing)
         cid = existing.id
         outcome = "updated"
     else:
@@ -113,6 +121,12 @@ def refresh_html_page_content_item(source: Source, *, commit: bool = True) -> di
         db.session.flush()
         cid = row.id
         outcome = "created"
+
+    if outcome == "created":
+        _sp: set[int] = set()
+        _so: set[int] = set()
+        collect_stale_targets_for_source(source, person_ids=_sp, org_ids=_so)
+        apply_public_digest_stale_flags(person_ids=_sp, org_ids=_so)
 
     mark_identity_stale_from_xor_change(
         before_person_id=source.person_id,
@@ -197,11 +211,13 @@ def _ingest_rss_source(source: Source) -> int:
         existing = ContentItem.query.filter_by(source_id=source.id, external_id=pe.external_id).first()
         if existing:
             continue
+        raw_link = (pe.link or "").strip()
+        catalog_link = stable_catalog_url(raw_link) if raw_link else None
         ci = ContentItem(
             source_id=source.id,
             external_id=pe.external_id,
             title=pe.title,
-            link=pe.link or None,
+            link=catalog_link,
             published_at=_published_dt(pe),
             snippet=pe.snippet or None,
         )
@@ -212,7 +228,7 @@ def _ingest_rss_source(source: Source) -> int:
 
 
 def _ingest_html_source(source: Source) -> tuple[int, int]:
-    """Fetch URL, dedupe snapshots, add ``ContentItem`` rows on hash change."""
+    """Fetch URL; record raw-byte snapshot; add ``ContentItem`` only when semantic ``mainsha`` changes."""
 
     body = _fetch_source_url_body(source.url)
     h = hashlib.sha256(body).hexdigest()
@@ -228,7 +244,7 @@ def _ingest_html_source(source: Source) -> tuple[int, int]:
     db.session.add(snap)
     snapshot_delta = 1
 
-    ext_id = f"sha256:{h}"
+    ext_id = html_poll_content_external_id(body)
     if ContentItem.query.filter_by(source_id=source.id, external_id=ext_id).first():
         return snapshot_delta, 0
 
@@ -258,6 +274,8 @@ def run_poll(*, on_source_step: PollStepCallback | None = None) -> PollLog:
     ok = True
     sources = Source.query.filter_by(enabled=True, pending=False).order_by(Source.id).all()
     total = len(sources)
+    stale_person_ids: set[int] = set()
+    stale_org_ids: set[int] = set()
 
     try:
         for i, s in enumerate(sources):
@@ -268,10 +286,14 @@ def run_poll(*, on_source_step: PollStepCallback | None = None) -> PollLog:
                     n = _ingest_rss_source(s)
                     line = f"[rss] {s.url}: {n} new item(s)"
                     lines.append(line)
+                    if n > 0:
+                        collect_stale_targets_for_source(s, person_ids=stale_person_ids, org_ids=stale_org_ids)
                 elif s.kind == "html_page":
                     snaps, contents = _ingest_html_source(s)
                     line = f"[html] {s.url}: snapshot +{snaps}; content items +{contents}"
                     lines.append(line)
+                    if contents > 0:
+                        collect_stale_targets_for_source(s, person_ids=stale_person_ids, org_ids=stale_org_ids)
                 else:
                     line = f"[skip] unknown kind {s.kind!r} id={s.id}"
                     lines.append(line)
@@ -286,6 +308,7 @@ def run_poll(*, on_source_step: PollStepCallback | None = None) -> PollLog:
                     on_source_step(
                         phase="done", index=i, total=total, source=s, ok=False, message=err_line
                     )
+        apply_public_digest_stale_flags(person_ids=stale_person_ids, org_ids=stale_org_ids)
         db.session.commit()
     except Exception:
         db.session.rollback()

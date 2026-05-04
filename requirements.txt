@@ -7,6 +7,7 @@ flask-limiter>=3.8
 werkzeug>=3.0
 feedparser>=6.0
 email-validator>=2.0
+shapely>=2.0
 
 # Uncomment or install when using Postgres (matches synapse_scope.md)
 # psycopg[binary]>=3.0

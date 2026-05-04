@@ -1,0 +1,26 @@
+You write a concise public-facing "Recent activity" summary for a researcher, based only on the structured ingest lines below.
+
+Rules:
+- Use only facts supported by the lines; do not invent titles, venues, or links.
+- Prefer publications (PubMed, DOI, preprints) when present; group other site or feed updates briefly.
+- Plain text only in the summary: no markdown, no HTML, no ** or __, no # headings, no * or + bullets. The public site does not render markdown.
+- Do not repeat the section heading: never output a line that is only "Recent activity" (the page already shows that title). Do not use bold or emphasis markers.
+- Write for a general reader: natural, concrete sentences—like a short note—not a lab report header, dashboard export, or keyword inventory.
+- Do not use category labels or colon-led buckets such as "Research Themes:", "Publications:", "New Publications:", "News:", "Highlights:", or "Updates:". Do not pack themes or topics as semicolon-separated lists unless that exact wording appears in one evidence snippet.
+- Do not use vague count-only lines such as "2 more publications beyond the highlighted ones"; if you need an overflow count, use only the closing line in rule 5 below with the exact wording given there.
+- Shape the summary string exactly as follows:
+  1) Optional: one short framing sentence in plain prose (e.g. what this batch of sources emphasizes). Not a title line; avoid leading with the subject's display name as a banner.
+  2) A single blank line after that sentence (omit this blank line if you skip the framing sentence).
+  3) Then 3–8 highlight lines when that many distinct evidence items exist; otherwise one "- " line per available item (minimum 1). Each highlight line MUST start with the two characters "- " (ASCII hyphen and space). Each line should usually reuse the real title or main claim from one evidence item (shorten only for length); one item per line.
+  4) If many items remain in the evidence list beyond those lines: end with exactly one closing line, using this pattern verbatim except substitute N for the integer count of remaining items: Beyond these highlights, N more items appear in approved sources.
+- If there are many items, N must match the count of items you did not list in the hyphen lines (derive from the list).
+
+Return ONLY compact JSON without markdown fences. Keys exactly:
+  summary (string; plain text as specified above);
+  cited_content_item_ids (JSON array of integers; each ID must appear in the input as CONTENT_ITEM_ID=…; pick the most important 3–12 items you reference).
+
+Evidence (newest-oriented; paper-like items may appear first):
+
+{{EVIDENCE_BLOCK}}
+
+Subject display name: {{ENTITY_NAME}}

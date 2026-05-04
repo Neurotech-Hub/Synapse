@@ -6,6 +6,7 @@ from flask_wtf.csrf import CSRFProtect
 from app.auth import Operator
 from app.config import get_config
 from app.extensions import db, limiter, login_manager, migrate
+from app.public_digest.build import normalize_public_digest_summary
 from app.web.admin import admin_bp
 from app.web.public_routes import public_bp
 
@@ -38,6 +39,10 @@ def create_app(override_config: dict | None = None) -> Flask:
 
     flask_app.register_blueprint(public_bp)
     flask_app.register_blueprint(admin_bp)
+
+    @flask_app.template_filter("format_public_digest")
+    def _format_public_digest_filter(text):
+        return normalize_public_digest_summary("" if text is None else str(text))
 
     import app.models  # noqa: F401  # register tables with Alembic / SQLAlchemy
 

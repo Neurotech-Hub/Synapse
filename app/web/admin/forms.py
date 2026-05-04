@@ -88,11 +88,18 @@ class OrganizationForm(FlaskForm):
     submit = SubmitField("Save")
 
 
-class PlaceForm(FlaskForm):
+class BuildingForm(FlaskForm):
     display_name = StringField("Display name", validators=[DataRequired(), Length(max=512)])
-    place_name = StringField("Place name", validators=[DataRequired(), Length(max=512)])
+    place_name = StringField("Building name", validators=[DataRequired(), Length(max=512)])
     latitude = FloatField("Latitude", validators=[DataRequired()])
     longitude = FloatField("Longitude", validators=[DataRequired()])
+    notes = TextAreaField("Notes", validators=[Optional()])
+    submit = SubmitField("Save")
+
+
+class RegionForm(FlaskForm):
+    region_name = StringField("Region name", validators=[DataRequired(), Length(max=512)])
+    geojson = TextAreaField("GeoJSON (polygon)", validators=[Optional()])
     notes = TextAreaField("Notes", validators=[Optional()])
     submit = SubmitField("Save")
 

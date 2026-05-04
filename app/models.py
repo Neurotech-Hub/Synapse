@@ -14,10 +14,10 @@ person_organization = db.Table(
     db.Column("organization_id", db.Integer, db.ForeignKey("organization.id", ondelete="CASCADE"), primary_key=True),
 )
 
-organization_place = db.Table(
-    "organization_place",
-    db.Column("organization_id", db.Integer, db.ForeignKey("organization.id", ondelete="CASCADE"), primary_key=True),
-    db.Column("place_id", db.Integer, db.ForeignKey("place.id", ondelete="CASCADE"), primary_key=True),
+region_building = db.Table(
+    "region_building",
+    db.Column("region_id", db.Integer, db.ForeignKey("region.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("building_id", db.Integer, db.ForeignKey("building.id", ondelete="CASCADE"), primary_key=True),
 )
 
 
@@ -29,9 +29,13 @@ class Organization(db.Model):
     display_name = db.Column(db.String(512), nullable=False)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    #: Set by ingest when new public content may warrant a new public digest (cleared when digest build succeeds).
+    public_digest_stale = db.Column(db.Boolean, nullable=False, default=False)
+
+    building_id = db.Column(db.Integer, db.ForeignKey("building.id", ondelete="SET NULL"), nullable=True)
 
     people = db.relationship("Person", secondary=person_organization, back_populates="organizations")
-    places = db.relationship("Place", secondary=organization_place, back_populates="organizations")
+    building = db.relationship("Building", foreign_keys=[building_id], back_populates="organizations")
 
 
 class Person(db.Model):
@@ -42,12 +46,33 @@ class Person(db.Model):
     display_name = db.Column(db.String(512), nullable=False)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    public_digest_stale = db.Column(db.Boolean, nullable=False, default=False)
 
     organizations = db.relationship("Organization", secondary=person_organization, back_populates="people")
 
 
-class Place(db.Model):
-    __tablename__ = "place"
+class Region(db.Model):
+    """Map-drawn area (GeoJSON polygon stored as text)."""
+
+    __tablename__ = "region"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(160), nullable=False, unique=True)
+    region_name = db.Column(db.String(512), nullable=False)
+    geojson = db.Column(db.Text, nullable=True)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    buildings_explicit = db.relationship(
+        "Building",
+        foreign_keys="Building.region_id",
+        back_populates="region",
+        passive_deletes=True,
+    )
+
+
+class Building(db.Model):
+    __tablename__ = "building"
 
     id = db.Column(db.Integer, primary_key=True)
     slug = db.Column(db.String(160), nullable=False, unique=True)
@@ -59,18 +84,21 @@ class Place(db.Model):
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    organizations = db.relationship("Organization", secondary=organization_place, back_populates="places")
+    region_id = db.Column(db.Integer, db.ForeignKey("region.id", ondelete="SET NULL"), nullable=True)
+    region = db.relationship("Region", foreign_keys=[region_id], back_populates="buildings_explicit")
+
+    organizations = db.relationship("Organization", back_populates="building", foreign_keys="Organization.building_id")
 
 
 class PersonaSnapshot(db.Model):
-    """CM ``PIPersona``-aligned snapshot for a person, organization, or place (built via Ollama)."""
+    """CM ``PIPersona``-aligned snapshot for a person, organization, or building (built via Ollama)."""
 
     __tablename__ = "persona_snapshot"
     __table_args__ = (
         CheckConstraint(
-            "(person_id IS NOT NULL AND organization_id IS NULL AND place_id IS NULL) OR "
-            "(person_id IS NULL AND organization_id IS NOT NULL AND place_id IS NULL) OR "
-            "(person_id IS NULL AND organization_id IS NULL AND place_id IS NOT NULL)",
+            "(person_id IS NOT NULL AND organization_id IS NULL AND building_id IS NULL) OR "
+            "(person_id IS NULL AND organization_id IS NOT NULL AND building_id IS NULL) OR "
+            "(person_id IS NULL AND organization_id IS NULL AND building_id IS NOT NULL)",
             name="ck_persona_snapshot_subject_xor",
         ),
     )
@@ -80,7 +108,7 @@ class PersonaSnapshot(db.Model):
     organization_id = db.Column(
         db.Integer, db.ForeignKey("organization.id", ondelete="CASCADE"), unique=True, nullable=True
     )
-    place_id = db.Column(db.Integer, db.ForeignKey("place.id", ondelete="CASCADE"), unique=True, nullable=True)
+    building_id = db.Column(db.Integer, db.ForeignKey("building.id", ondelete="CASCADE"), unique=True, nullable=True)
 
     research_focus = db.Column(db.JSON, nullable=False, default=list)
     methods = db.Column(db.JSON, nullable=False, default=list)
@@ -111,9 +139,9 @@ class PersonaSnapshot(db.Model):
         foreign_keys=[organization_id],
         backref=db.backref("persona", uselist=False, cascade="all, delete-orphan"),
     )
-    place = db.relationship(
-        "Place",
-        foreign_keys=[place_id],
+    building = db.relationship(
+        "Building",
+        foreign_keys=[building_id],
         backref=db.backref("persona", uselist=False, cascade="all, delete-orphan"),
     )
 
@@ -162,9 +190,28 @@ class ContentItem(db.Model):
         db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
 
+    public_feed_verdict = db.Column(db.String(8), nullable=True)  # NULL | show | hide
+    public_feed_display_title = db.Column(db.Text, nullable=True)
+    public_feed_display_blurb = db.Column(db.Text, nullable=True)
+    public_feed_input_fingerprint = db.Column(db.String(128), nullable=True)
+    public_feed_curated_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    public_feed_model_used = db.Column(db.String(128), nullable=True)
+
     source = db.relationship("Source", back_populates="content_items")
 
     __table_args__ = (db.UniqueConstraint("source_id", "external_id", name="uq_content_item_source_external"),)
+
+    @property
+    def public_latest_card_title(self) -> str:
+        from app.domain.public_feed_display import effective_public_latest_title
+
+        return effective_public_latest_title(self)
+
+    @property
+    def public_latest_card_snippet(self) -> str | None:
+        from app.domain.public_feed_display import effective_public_latest_snippet
+
+        return effective_public_latest_snippet(self)
 
 
 class SourceSnapshot(db.Model):
@@ -178,15 +225,46 @@ class SourceSnapshot(db.Model):
     source = db.relationship("Source", back_populates="snapshots")
 
 
+class PublicActivityDigest(db.Model):
+    """Audience-facing digest of recent ingest for one person or organization (separate from admin LeadReport)."""
+
+    __tablename__ = "public_activity_digest"
+    __table_args__ = (
+        CheckConstraint(
+            "(CASE WHEN person_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN organization_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_public_activity_digest_target_one",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey("person.id", ondelete="CASCADE"), nullable=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey("organization.id", ondelete="CASCADE"), nullable=True)
+
+    summary_text = db.Column(db.Text, nullable=True)
+    cited_content_item_ids_json = db.Column(db.Text, nullable=True)
+    input_fingerprint = db.Column(db.String(128), nullable=True)
+    prompt_version = db.Column(db.String(64), nullable=False, default="1")
+    model_used = db.Column(db.String(128), nullable=True)
+    status = db.Column(db.String(16), nullable=False, default="ok")  # ok | failed
+    error_detail = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    person = db.relationship("Person", foreign_keys=[person_id], backref="public_activity_digests")
+    organization = db.relationship("Organization", foreign_keys=[organization_id], backref="public_activity_digests")
+
+
 class LeadReport(db.Model):
-    """Hub-centric synthesis run against one person, organization, or place (multi-step LLM)."""
+    """Hub-centric synthesis run against one person, organization, building, or region (multi-step LLM)."""
 
     __tablename__ = "lead_report"
     __table_args__ = (
         CheckConstraint(
             "(CASE WHEN target_person_id IS NOT NULL THEN 1 ELSE 0 END + "
             "CASE WHEN target_organization_id IS NOT NULL THEN 1 ELSE 0 END + "
-            "CASE WHEN target_place_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            "CASE WHEN target_building_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN target_region_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_lead_report_target_one",
         ),
     )
@@ -200,7 +278,8 @@ class LeadReport(db.Model):
     target_organization_id = db.Column(
         db.Integer, db.ForeignKey("organization.id", ondelete="CASCADE"), nullable=True
     )
-    target_place_id = db.Column(db.Integer, db.ForeignKey("place.id", ondelete="CASCADE"), nullable=True)
+    target_building_id = db.Column(db.Integer, db.ForeignKey("building.id", ondelete="CASCADE"), nullable=True)
+    target_region_id = db.Column(db.Integer, db.ForeignKey("region.id", ondelete="CASCADE"), nullable=True)
 
     status = db.Column(db.String(24), nullable=False, default="queued")  # queued|running|ok|failed
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -221,7 +300,8 @@ class LeadReport(db.Model):
     hub_organization = db.relationship("Organization", foreign_keys=[hub_organization_id])
     target_person = db.relationship("Person", foreign_keys=[target_person_id])
     target_organization = db.relationship("Organization", foreign_keys=[target_organization_id])
-    target_place = db.relationship("Place", foreign_keys=[target_place_id])
+    target_building = db.relationship("Building", foreign_keys=[target_building_id])
+    target_region = db.relationship("Region", foreign_keys=[target_region_id])
 
 
 class PollLog(db.Model):

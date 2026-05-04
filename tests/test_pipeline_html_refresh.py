@@ -7,6 +7,7 @@ import pytest
 
 from app import create_app
 from app.extensions import db
+from app.ingest.html_extract import html_poll_content_external_id
 from app.ingest.pipeline import refresh_html_page_content_item
 from app.models import ContentItem, Source
 
@@ -49,7 +50,7 @@ def app(tmp_path):
 def test_refresh_html_page_updates_snippet_when_hash_unchanged(app):
     body = _html_body()
     h = hashlib.sha256(body).hexdigest()
-    ext_id = f"sha256:{h}"
+    ext_id = html_poll_content_external_id(body)
 
     with app.app_context():
         src = Source(
@@ -90,7 +91,7 @@ def test_refresh_html_page_updates_snippet_when_hash_unchanged(app):
 def test_refresh_html_page_creates_content_item_when_missing(app):
     body = _html_body()
     h = hashlib.sha256(body).hexdigest()
-    ext_id = f"sha256:{h}"
+    ext_id = html_poll_content_external_id(body)
 
     with app.app_context():
         src = Source(
@@ -137,7 +138,7 @@ def test_refresh_html_page_skipped_for_rss_kind(app):
 def test_refresh_html_page_uses_llm_when_enabled(app):
     body = _html_body()
     h = hashlib.sha256(body).hexdigest()
-    ext_id = f"sha256:{h}"
+    ext_id = html_poll_content_external_id(body)
 
     app2 = create_app(
         override_config={

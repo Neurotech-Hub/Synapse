@@ -14,7 +14,7 @@
     <tr>
       <th>Slug</th><th>Name</th>
       <th scope="col" class="tbl-col-center">People</th>
-      <th scope="col" class="tbl-col-center">Places</th>
+      <th scope="col" class="tbl-col-center">Building</th>
       <th scope="col" class="tbl-col-center">Org-owned sources</th>
       <th scope="col" class="tbl-hub-mark-col">Hub corpus</th>
       <th scope="col" class="tbl-col-center">Collab (rollup)</th><th class="tbl-actions-col"></th>
@@ -26,7 +26,7 @@
       <td class="mono">{{ o.slug }}</td>
       <td>{{ o.display_name }}</td>
       <td class="tbl-col-center">{{ people_counts.get(o.id, 0) }}</td>
-      <td class="tbl-col-center">{{ places_counts.get(o.id, 0) }}</td>
+      <td class="tbl-col-center muted">{% if o.building_id %}<a href="{{ url_for('admin.buildings_view', bid=o.building_id) }}">{{ building_cell.get(o.id, 'Building') }}</a>{% else %}—{% endif %}</td>
       <td class="tbl-col-center">{{ org_owned_source_counts.get(o.id, 0) }}</td>
       <td class="tbl-hub-mark-col">
         {% if hub_organization_id is not none and o.id == hub_organization_id %}

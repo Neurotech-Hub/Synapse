@@ -1,4 +1,4 @@
-"""Organization / Place persona rollup (member snapshots + thin source excerpts)."""
+"""Organization / building persona rollup (member snapshots + thin source excerpts)."""
 
 from __future__ import annotations
 
@@ -11,12 +11,13 @@ from sqlalchemy import desc
 from sqlalchemy.orm import joinedload
 
 from app.domain.effective_sources import source_ids_for_organization
+from app.domain.entity_associations import organization_ids_for_building
 from app.extensions import db
 from app.identity.builder import IDENTITY_PROMPT_VERSION, apply_parsed_persona_payload
 from app.identity.prompt import build_organization_persona_prompt, build_place_persona_prompt
 from app.ingest.html_extract import plaintext_excerpt as _plaintext_excerpt
 from app.ingest.ollama_client import OLLAMA_MODEL, run_identity_llm
-from app.models import ContentItem, Organization, Person, PersonaSnapshot, Place
+from app.models import Building, ContentItem, Organization, Person, PersonaSnapshot
 
 
 def _persona_mini_dict(sn: PersonaSnapshot | None) -> dict[str, Any]:
@@ -158,27 +159,30 @@ def rebuild_organization_persona(
     return outcome
 
 
-def rebuild_place_persona(
-    place_id: int,
+def rebuild_building_persona(
+    building_id: int,
     *,
     skip_if_same_fingerprint: bool = False,
     user_initiated: bool = False,
 ) -> dict[str, Any]:
-    outcome: dict[str, Any] = {"place_id": place_id, "status": "skipped", "detail": ""}
+    outcome: dict[str, Any] = {"building_id": building_id, "status": "skipped", "detail": ""}
     pl = (
-        Place.query.options(joinedload(Place.organizations))
-        .filter_by(id=int(place_id))
+        Building.query.options(joinedload(Building.organizations))
+        .filter_by(id=int(building_id))
         .first()
     )
     if pl is None:
-        outcome["detail"] = "missing place"
+        outcome["detail"] = "missing building"
         return outcome
 
-    org_ids_linked = sorted([o.id for o in (pl.organizations or [])])
+    org_ids_linked = sorted(organization_ids_for_building(int(building_id)))
+    org_objs = [db.session.get(Organization, oid) for oid in org_ids_linked]
+    org_objs = [o for o in org_objs if o is not None]
+
     member_payload: list[dict[str, Any]] = []
     seen_pids: set[int] = set()
-    for oid in org_ids_linked:
-        memb = Person.query.join(Person.organizations).filter(Organization.id == oid).distinct().all()
+    for org in org_objs:
+        memb = Person.query.join(Person.organizations).filter(Organization.id == org.id).distinct().all()
         for p in memb:
             if p.id in seen_pids:
                 continue
@@ -209,7 +213,7 @@ def rebuild_place_persona(
 
     row = pl.persona
     if row is None:
-        row = PersonaSnapshot(place_id=pl.id)
+        row = PersonaSnapshot(building_id=pl.id)
         db.session.add(row)
         pl.persona = row
 
@@ -218,7 +222,7 @@ def rebuild_place_persona(
         return outcome
 
     org_blob_lines: list[str] = []
-    for org in sorted(pl.organizations or [], key=lambda x: x.id):
+    for org in sorted(org_objs, key=lambda x: x.id):
         org_blob_lines.append(
             f"organization_id={org.id}\norganization_slug={org.slug}\n"
             f"organization_name={(org.display_name or '').strip()}\n---\n"

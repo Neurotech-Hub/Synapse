@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{% block title %}Synapse{% endblock %} — Neurotech Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='public.css') }}"/>
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="public">
+  <header class="site-head">
+    <div class="site-head-inner site-head-inner--wide">
+      <p class="brand-line">
+        <a href="{{ url_for('public.index') }}" class="brand-link"><span class="brand-name">Synapse</span></a>
+        <span class="brand-by-org">BY THE NEUROTECH HUB</span>
+      </p>
+      <nav class="public-nav" aria-label="Public sections">
+        <a href="{{ url_for('public.index') }}" class="public-nav-link{% if nav_active == 'home' %} is-active{% endif %}">Home</a>
+        <a href="{{ url_for('public.people_list') }}" class="public-nav-link{% if nav_active == 'people' %} is-active{% endif %}">People</a>
+        <a href="{{ url_for('public.organizations_list') }}" class="public-nav-link{% if nav_active == 'organizations' %} is-active{% endif %}">Organizations</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-stack{% block main_mod %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-foot">
+    <nav class="foot-nav" aria-label="Footer">
+      <a href="{{ url_for('admin.login') }}" class="foot-nav-link">Team sign-in</a>
+      <span class="foot-nav-sep" aria-hidden="true">&bull;</span>
+      <a href="mailto:gaidica@wustl.edu" class="foot-nav-link">Say Hello</a>
+    </nav>
+  </footer>
+</body>
+</html>

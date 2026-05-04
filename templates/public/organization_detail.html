@@ -1,0 +1,47 @@
+{% extends "public/layout.html" %}
+{% block title %}{{ organization.display_name }}{% endblock %}
+{% block content %}
+  <article class="public-entity-page">
+    <header class="public-entity-header">
+      <h1 class="public-page-title">{{ organization.display_name }}</h1>
+      {% if persona and persona.build_status == 'ok' %}
+        <div class="public-persona-note" role="note">
+          <p class="public-persona-label">Snapshot summary (hub-generated, not a claim of fact)</p>
+          {% if persona.research_focus %}
+            <p><strong>Focus:</strong> {{ (persona.research_focus or [])[:8] | join('; ') }}{% if (persona.research_focus or [])|length > 8 %}…{% endif %}</p>
+          {% endif %}
+          {% if persona.keywords %}
+            <p class="public-keywords">{{ (persona.keywords or [])[:14] | join(' · ') }}</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </header>
+
+    <section class="public-section" aria-labelledby="digest-heading">
+      <h2 id="digest-heading" class="public-section-title">Recent activity</h2>
+      {% if digest and digest.summary_text %}
+        <div class="public-digest-body">{{ digest.summary_text | format_public_digest }}</div>
+      {% else %}
+        <p class="public-muted">No digest yet—our team can publish a summary from the admin Digest page.</p>
+      {% endif %}
+    </section>
+
+    {% if highlights %}
+      <section class="public-section" aria-labelledby="hl-heading">
+        <h2 id="hl-heading" class="public-section-title">Highlighted items</h2>
+        <ul class="public-latest-list" role="list">
+          {% for it in highlights %}
+            <li class="public-latest-item">
+              {% if it.link %}
+                <a href="{{ it.link }}" class="public-latest-link" rel="noopener noreferrer" target="_blank">{{ it.title or 'Untitled' }}</a>
+              {% else %}
+                <span class="public-latest-link">{{ it.title or 'Untitled' }}</span>
+              {% endif %}
+              <span class="public-latest-via">via {{ (it.source.label or it.source.url) | truncate(56, True, '…') }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+  </article>
+{% endblock %}

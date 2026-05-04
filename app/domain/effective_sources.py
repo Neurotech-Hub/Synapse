@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.extensions import db
-from app.models import Person, Source, organization_place as organization_place_tbl, person_organization
+from app.models import Person, Source, person_organization
 
 
 def source_ids_for_organization(organization_id: int) -> set[int]:

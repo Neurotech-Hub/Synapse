@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% block title %}Regions{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Regions</h1>
+  <div class="page-head-actions">
+    <a href="{{ url_for('admin.regions_new') }}" class="primary-btn-inline">New region</a>
+  </div>
+</header>
+<table class="tbl tbl-compact">
+  <thead>
+    <tr><th>Slug</th><th>Name</th><th>Geometry</th><th class="tbl-actions-col"></th></tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td class="mono">{{ r.slug }}</td>
+      <td>{{ r.region_name }}</td>
+      <td class="muted">{% if r.geojson %}yes{% else %}—{% endif %}</td>
+      <td class="tbl-actions"><a href="{{ url_for('admin.regions_view', rid=r.id) }}">View</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="tbl-empty muted">No regions yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="admin-form-foot"><a href="{{ url_for('admin.buildings_list') }}" class="back-link">&larr; Buildings</a></p>
+{% endblock %}

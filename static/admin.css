@@ -105,6 +105,18 @@ body.admin {
   margin-top: 1.35rem;
 }
 
+.admin-sidebar-nav .admin-sidebar-rule {
+  border: none;
+  margin: 0.48rem 0.35rem 0.42rem;
+  padding: 0;
+  height: 0;
+  align-self: stretch;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+  opacity: 0.92;
+}
+
 @media (min-width: 641px) {
   .admin-sidebar-nav {
     flex: 1 1 auto;
@@ -1477,6 +1489,20 @@ body.admin {
   cursor: wait;
 }
 
+/* Digest admin: freeze peer Build buttons without :disabled (avoids all-gray + layout shift). */
+#digest-admin-page.digest-llm-sync-running button[type="submit"][data-digest-peer-only="1"] {
+  pointer-events: none;
+  cursor: wait;
+  opacity: 1;
+}
+
+.digest-subjects-llm-status {
+  margin: 0.9rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  max-width: 48rem;
+}
+
 .disapprove-btn {
   padding: 0.4rem 0.78rem;
   border-radius: var(--radius-tight);
@@ -1620,6 +1646,10 @@ body.admin {
   font-variant-numeric: tabular-nums;
 }
 
+.tbl tbody tr.tbl-row-digest-stale td {
+  background-color: rgba(254, 226, 226, 0.55);
+}
+
 .leads-leads-table tbody td.tbl-col-check {
   font-variant-numeric: normal;
 }
@@ -1717,7 +1747,8 @@ body.admin {
   text-underline-offset: 2px;
 }
 
-.tbl-actions {
+.tbl td.tbl-actions,
+.tbl th.tbl-actions {
   vertical-align: middle;
   text-align: right;
   white-space: nowrap;
@@ -2851,6 +2882,13 @@ body.admin {
     margin-top: 0.72rem;
     gap: 0.25rem 0.35rem;
     align-items: flex-start;
+  }
+
+  .admin-sidebar-nav .admin-sidebar-rule {
+    flex-basis: 100%;
+    width: 100%;
+    margin: 0.35rem 0 0.3rem;
+    box-shadow: none;
   }
 
   .admin-sidebar-group {

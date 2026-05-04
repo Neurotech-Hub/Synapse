@@ -12,6 +12,10 @@ OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/"
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
 GENERATE_TIMEOUT = 120.0
 LEAD_REPORT_GENERATE_TIMEOUT = float(os.environ.get("SYNAPSE_LEAD_REPORT_OLLAMA_TIMEOUT", "900") or "900")
+PUBLIC_DIGEST_GENERATE_TIMEOUT = float(os.environ.get("SYNAPSE_PUBLIC_DIGEST_OLLAMA_TIMEOUT", "300") or "300")
+PUBLIC_FEED_CURATE_GENERATE_TIMEOUT = float(
+    os.environ.get("SYNAPSE_PUBLIC_FEED_CURATE_OLLAMA_TIMEOUT", "180") or "180"
+)
 TAGS_TIMEOUT_SEC = 3.0
 
 
@@ -293,6 +297,56 @@ def run_lead_report_llm(prompt: str, *, json_format: bool = True) -> dict[str, A
             json_format=json_format,
             options=opts,
             timeout=LEAD_REPORT_GENERATE_TIMEOUT,
+        )
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+        return None
+    return _parse_model_json_object(text)
+
+
+def _public_digest_num_ctx() -> int:
+    raw = (os.environ.get("SYNAPSE_PUBLIC_DIGEST_NUM_CTX") or "32768").strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        n = 32768
+    return max(8192, min(n, 131072))
+
+
+def run_public_digest_llm(prompt: str) -> dict[str, Any] | None:
+    """JSON-shaped public digest summaries (separate from lead reports)."""
+
+    opts = {"num_ctx": _public_digest_num_ctx()}
+    try:
+        text = generate_non_stream(
+            prompt,
+            json_format=True,
+            options=opts,
+            timeout=PUBLIC_DIGEST_GENERATE_TIMEOUT,
+        )
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+        return None
+    return _parse_model_json_object(text)
+
+
+def _public_feed_curate_num_ctx() -> int:
+    raw = (os.environ.get("SYNAPSE_PUBLIC_FEED_CURATE_NUM_CTX") or "16384").strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        n = 16384
+    return max(8192, min(n, 65536))
+
+
+def run_public_feed_curate_llm(prompt: str) -> dict[str, Any] | None:
+    """JSON object with ``results`` array for public Latest curation."""
+
+    opts = {"num_ctx": _public_feed_curate_num_ctx()}
+    try:
+        text = generate_non_stream(
+            prompt,
+            json_format=True,
+            options=opts,
+            timeout=PUBLIC_FEED_CURATE_GENERATE_TIMEOUT,
         )
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
         return None

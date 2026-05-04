@@ -43,6 +43,27 @@ def test_public_home(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert b"Synapse" in resp.data
+    assert b"The Latest" in resp.data
+
+
+def test_public_people_and_orgs_lists(client):
+    assert client.get("/people/").status_code == 200
+    assert client.get("/organizations/").status_code == 200
+
+
+def test_admin_digest_page(client):
+    client.post(
+        "/admin/login",
+        data={"password": "test-pass", "submit": "Sign in"},
+        follow_redirects=True,
+    )
+    r = client.get("/admin/digest")
+    assert r.status_code == 200
+    assert b"Public digest" in r.data
+    assert b"/admin/digest/build-all" in r.data
+    assert b"digest-llm-sync-submit" in r.data
+    assert b"digest-build-all-form" in r.data
+    assert b"Stale" in r.data
 
 
 def test_public_submit_and_duplicate(app, client):

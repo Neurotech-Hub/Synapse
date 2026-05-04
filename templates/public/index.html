@@ -1,73 +1,119 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Synapse — Neurotech Hub</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="{{ url_for('static', filename='public.css') }}"/>
-</head>
-<body class="public">
-  <header class="site-head">
-    <div class="site-head-inner">
-      <p class="brand-line"><span class="brand-name">Synapse</span><span class="brand-by-org">BY THE NEUROTECH HUB</span></p>
+{% extends "public/layout.html" %}
+{% block title %}Synapse{% endblock %}
+{% block content %}
+  <section class="hero-block">
+    <h1 class="hero-title">Tell us what to watch.</h1>
+    <p class="hero-sub">Quiet signal from the links that matter—labs, papers, pages.</p>
+  </section>
+
+  <section class="composer-panel" aria-labelledby="composer-heading">
+    <div class="composer-inner">
+      <h2 id="composer-heading" class="composer-heading">What’s worth ingesting?</h2>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <p role="status" class="flash flash-{{ cat }}">{{ msg }}</p>
+        {% endfor %}
+      {% endwith %}
+
+      <form method="post" class="composer-form" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="composer-row composer-row--fields">
+          {{ form.url(
+            class_="composer-input",
+            placeholder="Paste a lab site, RSS page, anything https…",
+            autocomplete="url",
+            autofocus=true,
+            **({"aria-invalid": "true", "aria-describedby": "composer-errors"} if form.url.errors else {})
+          ) }}
+          {{ form.submit(class_="composer-submit") }}
+        </div>
+        <div class="composer-row composer-row--meta">
+          <label class="composer-intent-label">
+            <span class="composer-intent-caption">This link is mainly</span>
+            {{ form.ownership_intent(class_="composer-intent-select") }}
+          </label>
+        </div>
+        {% if form.url.errors %}
+          <div id="composer-errors" class="composer-error-wrap">
+            {% for err in form.url.errors %}
+              <p class="composer-error">{{ err }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </form>
     </div>
-  </header>
+  </section>
 
-  <main class="main-stack">
-    <section class="hero-block">
-      <h1 class="hero-title">Tell us what to watch.</h1>
-      <p class="hero-sub">Quiet signal from the links that matter—labs, papers, pages.</p>
-    </section>
-
-    <section class="composer-panel" aria-labelledby="composer-heading">
-      <div class="composer-inner">
-        <h2 id="composer-heading" class="composer-heading">What’s worth ingesting?</h2>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% for cat, msg in messages %}
-            <p role="status" class="flash flash-{{ cat }}">{{ msg }}</p>
-          {% endfor %}
-        {% endwith %}
-
-        <form method="post" class="composer-form" novalidate>
-          {{ form.hidden_tag() }}
-          <div class="composer-row composer-row--fields">
-            {{ form.url(
-              class_="composer-input",
-              placeholder="Paste a lab site, RSS page, anything https…",
-              autocomplete="url",
-              autofocus=true,
-              **({"aria-invalid": "true", "aria-describedby": "composer-errors"} if form.url.errors else {})
-            ) }}
-            {{ form.submit(class_="composer-submit") }}
-          </div>
-          <div class="composer-row composer-row--meta">
-            <label class="composer-intent-label">
-              <span class="composer-intent-caption">This link is mainly</span>
-              {{ form.ownership_intent(class_="composer-intent-select") }}
-            </label>
-          </div>
-          {% if form.url.errors %}
-            <div id="composer-errors" class="composer-error-wrap">
-              {% for err in form.url.errors %}
-                <p class="composer-error">{{ err }}</p>
-              {% endfor %}
-            </div>
+  <section class="public-latest-section" aria-labelledby="latest-heading">
+    <div class="public-latest-head">
+      <h2 id="latest-heading" class="public-section-title public-section-title--home">The Latest</h2>
+      {% if filter_label %}
+        <p class="public-filter-chip">Filtered: {{ filter_label }} · <a href="{{ url_for('public.index') }}">Clear</a></p>
+      {% endif %}
+    </div>
+    {% if latest_groups %}
+      <div class="public-latest-cards">
+        {% for card in latest_groups %}
+          {% if card.kind == 'batch' %}
+            <article class="public-card public-card--batch public-card--reveal" style="--reveal-i: {{ loop.index0 }};">
+              <p class="public-card-kicker">{{ card.batch_items | length }} new from {{ (card.source.label or card.source.url) | truncate(52, True, '…') }}</p>
+              <ul class="public-card-batch-list" role="list">
+                {% for it in card.batch_items %}
+                  <li>
+                    {% if it.link %}
+                      <a href="{{ it.link }}" rel="noopener noreferrer" target="_blank">{{ it.public_latest_card_title }}</a>
+                    {% else %}
+                      {{ it.public_latest_card_title }}
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            </article>
+          {% else %}
+            {% set it = card.item %}
+            <article class="public-card public-card--reveal" style="--reveal-i: {{ loop.index0 }};">
+              <p class="public-card-kicker">via {{ (it.source.label or it.source.url) | truncate(52, True, '…') }}</p>
+              <h3 class="public-card-title">
+                {% if it.link %}
+                  <a href="{{ it.link }}" rel="noopener noreferrer" target="_blank">{{ it.public_latest_card_title }}</a>
+                {% else %}
+                  {{ it.public_latest_card_title }}
+                {% endif %}
+              </h3>
+              {% if it.public_latest_card_snippet %}
+                <p class="public-card-snippet">{{ it.public_latest_card_snippet | truncate(220, True, '…') }}</p>
+              {% endif %}
+            </article>
           {% endif %}
-        </form>
+        {% endfor %}
       </div>
-    </section>
-
-    <p class="future-hint muted">Soon: per-link readouts—what changed, why it matters—before anything goes public-facing.</p>
-  </main>
-
-  <footer class="site-foot">
-    <nav class="foot-nav" aria-label="Footer">
-      <a href="{{ url_for('admin.login') }}" class="foot-nav-link">Team sign-in</a>
-    </nav>
-  </footer>
-</body>
-</html>
+    {% else %}
+      <p class="public-muted public-latest-empty">Nothing to show yet—once approved sources ingest content, it will land here.</p>
+    {% endif %}
+  </section>
+  <script>
+    (function () {
+      var cards = document.querySelectorAll(".public-card--reveal");
+      if (!cards.length) return;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        cards.forEach(function (el) {
+          el.classList.add("public-card--visible");
+        });
+        return;
+      }
+      if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("animation-timeline", "view()")) return;
+      var io = new IntersectionObserver(
+        function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) e.target.classList.add("public-card--visible");
+          });
+        },
+        { root: null, rootMargin: "0px 0px -12% 0px", threshold: 0.06 }
+      );
+      cards.forEach(function (c) {
+        io.observe(c);
+      });
+    })();
+  </script>
+{% endblock %}

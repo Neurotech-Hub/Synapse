@@ -13,8 +13,8 @@ from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.ingest.html_extract import plaintext_excerpt as _plaintext_excerpt
 from app.domain.effective_sources import source_ids_for_organization
-from app.domain.entity_associations import organization_ids_for_place
-from app.models import ContentItem, Person, Place, Source, SourceSnapshot
+from app.domain.entity_associations import organization_ids_for_building
+from app.models import ContentItem, Person, Source, SourceSnapshot
 
 _PUBMED_ID = re.compile(r"pubmed\.ncbi\.nlm\.nih\.gov/\s*(\d+)", re.I)
 DEFAULT_IDENTITY_CHUNK_MAX = 4000
@@ -221,8 +221,8 @@ def organization_has_identity_evidence_signals(organization_id: int) -> bool:
     )
 
 
-def place_has_identity_evidence_signals(place_id: int) -> bool:
-    for oid in organization_ids_for_place(int(place_id)):
+def building_has_identity_evidence_signals(building_id: int) -> bool:
+    for oid in organization_ids_for_building(int(building_id)):
         if organization_has_identity_evidence_signals(int(oid)):
             return True
     return False

@@ -85,10 +85,48 @@ def test_html_page_poll_creates_snapshot_and_content_item(app):
         items = ContentItem.query.filter_by(source_id=s.id).all()
         assert len(items) == 1
         it = items[0]
-        assert it.external_id.startswith("sha256:")
+        assert it.external_id.startswith("mainsha:")
         assert "Lab Page" in (it.title or "")
         assert "roadmap" in (it.snippet or "").lower()
         assert it.link == "https://example.invalid/lab-news"
+
+
+def test_html_page_semantic_duplicate_same_main_no_second_content_item(app):
+    """Different raw bytes but identical main text → one ContentItem, two snapshots."""
+
+    core = b"Stable body unique phrase. " * 6
+    html_a = (
+        b"<html><head><title>Same</title></head><body><main><p>" + core + b"</p></main>"
+        b"<div class=noise>A</div></html>"
+    )
+    html_b = (
+        b"<html><head><title>Same</title></head><body><main><p>" + core + b"</p></main>"
+        b"<div class=noise>B</div></html>"
+    )
+
+    with app.app_context():
+        db.session.add(
+            Source(
+                url="https://example.invalid/semantic-dedupe",
+                kind="html_page",
+                enabled=True,
+                pending=False,
+            )
+        )
+        db.session.commit()
+
+    mock_open = patch(
+        "app.ingest.pipeline.urllib.request.urlopen",
+        side_effect=[_BytesResponse(html_a), _BytesResponse(html_b)],
+    )
+    with app.app_context(), mock_open:
+        run_poll()
+        run_poll()
+
+    with app.app_context():
+        s = Source.query.filter_by(url="https://example.invalid/semantic-dedupe").first()
+        assert SourceSnapshot.query.filter_by(source_id=s.id).count() == 2
+        assert ContentItem.query.filter_by(source_id=s.id).count() == 1
 
 
 def test_html_page_duplicate_hash_no_second_content(app):
