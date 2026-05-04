@@ -12,7 +12,7 @@
       <summary class="log-entry-summary">
         <span class="log-entry-summary-row">
           <span class="log-entry-caret" aria-hidden="true"></span>
-          <time datetime="{{ log.ran_at.isoformat() }}">{{ log.ran_at.strftime("%Y-%m-%d %H:%M UTC") }}</time>
+          {{ log.ran_at|local_dt('datetime') }}
           {% if log.ok %}<span class="badge ok">ok</span>{% else %}<span class="badge bad">errors</span>{% endif %}
         </span>
         {% if preview %}

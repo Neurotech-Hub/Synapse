@@ -1606,9 +1606,6 @@ def leads_list():
     orgs = Organization.query.order_by(Organization.display_name.asc()).all()
     buildings = Building.query.order_by(Building.place_name.asc()).all()
     regions = Region.query.order_by(Region.region_name.asc()).all()
-    hub_choices_modal = [("", "(default: Hub corpus org under Leads)")] + [
-        (str(o.id), o.display_name) for o in Organization.query.order_by(Organization.display_name.asc()).all()
-    ]
     open_report_modal = (request.args.get("open_report_modal") or "").strip().lower() in ("1", "true", "yes")
     return render_template(
         "admin/leads_list.html",
@@ -1620,8 +1617,6 @@ def leads_list():
         organizations=orgs,
         buildings=buildings,
         regions=regions,
-        default_hub_organization_id=singleton.hub_organization_id,
-        hub_choices_modal=hub_choices_modal,
         open_report_modal=open_report_modal,
         lead_report_phase=active_report_phase(),
     )
@@ -1665,8 +1660,6 @@ def lead_reports_new():
         flash("A lead report job is already running — wait for it to finish.", "error")
         return redirect(url_for("admin.leads_list"))
 
-    hub_raw = (request.form.get("hub_report_organization_id") or "").strip()
-    hub_override = int(hub_raw) if hub_raw.isdigit() else None
     sk = (request.form.get("subject_kind") or "").strip().lower()
     pr_raw = (request.form.get("target_person_id") or "").strip()
     or_raw = (request.form.get("target_organization_id") or "").strip()
@@ -1681,7 +1674,7 @@ def lead_reports_new():
     try:
         if sk == "person" and tp_id is not None:
             row = enqueue_lead_report(
-                hub_organization_id=hub_override,
+                hub_organization_id=None,
                 target_person_id=tp_id,
                 target_organization_id=None,
                 target_building_id=None,
@@ -1689,7 +1682,7 @@ def lead_reports_new():
             )
         elif sk == "organization" and to_id is not None:
             row = enqueue_lead_report(
-                hub_organization_id=hub_override,
+                hub_organization_id=None,
                 target_person_id=None,
                 target_organization_id=to_id,
                 target_building_id=None,
@@ -1697,7 +1690,7 @@ def lead_reports_new():
             )
         elif sk == "building" and tb_id is not None:
             row = enqueue_lead_report(
-                hub_organization_id=hub_override,
+                hub_organization_id=None,
                 target_person_id=None,
                 target_organization_id=None,
                 target_building_id=tb_id,
@@ -1705,7 +1698,7 @@ def lead_reports_new():
             )
         elif sk == "region" and tr_id is not None:
             row = enqueue_lead_report(
-                hub_organization_id=hub_override,
+                hub_organization_id=None,
                 target_person_id=None,
                 target_organization_id=None,
                 target_building_id=None,
@@ -1718,11 +1711,6 @@ def lead_reports_new():
         db.session.commit()
         started, err = start_background_lead_report(current_app._get_current_object(), row.id)
         if started:
-            flash(
-                f"Lead report #{row.id} is running — status at the top of this page; "
-                "recent jobs log [lead-report] when complete.",
-                "success",
-            )
             return redirect(f"{url_for('admin.leads_list')}#lead-reports-section")
         flash(f"Report recorded but runner did not start: {err}", "error")
         return redirect(url_for("admin.leads_list"))
@@ -1781,6 +1769,12 @@ def lead_reports_review(rid: int):
         rpt.reviewed_at = None
         rpt.review_notes = None
     else:
+        if rpt.status in ("queued", "running"):
+            flash(
+                "You can mark a report as reviewed only after it has finished (status ok or failed).",
+                "error",
+            )
+            return redirect(url_for("admin.lead_reports_view", rid=rid))
         rpt.reviewed_at = datetime.now(timezone.utc)
         rpt.review_notes = (request.form.get("review_notes") or "").strip() or None
     db.session.commit()

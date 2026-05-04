@@ -43,7 +43,7 @@
         <div class="persona-kpi persona-kpi--text">
           <span class="persona-kpi-label">Generated</span>
           <span class="persona-kpi-value persona-kpi-meta muted">
-            {% if identity_row.generated_at %}{{ identity_row.generated_at.strftime('%Y-%m-%d %H:%M UTC') }}{% else %}—{% endif %}
+            {% if identity_row.generated_at %}{{ identity_row.generated_at|local_dt('datetime') }}{% else %}—{% endif %}
             {% if identity_row.model_used %} · {{ identity_row.model_used }}{% endif %}
           </span>
         </div>

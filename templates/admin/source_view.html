@@ -144,13 +144,13 @@
 <section id="snapshots" class="source-view-section source-view-section--break">
   <h2 class="source-view-h2">Snapshots</h2>
   <table class="tbl tbl-compact">
-    <thead><tr><th>ID</th><th>Fetched (UTC)</th><th>SHA-256</th></tr></thead>
+    <thead><tr><th>ID</th><th>Fetched</th><th>SHA-256</th></tr></thead>
     <tbody>
     {% for sn in snaps %}
       {% set sha = sn.body_sha256 %}
       <tr>
         <td>{{ sn.id }}</td>
-        <td>{{ sn.fetched_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>{{ sn.fetched_at|local_dt('datetime_sec') }}</td>
         <td class="mono tbl-sha-cell" title="{{ sha }}">{% if sha|length > 12 %}{{ sha[:12] }}…{% else %}{{ sha }}{% endif %}</td>
       </tr>
     {% else %}
@@ -168,7 +168,7 @@
     {% for it in content_preview %}
       <tr>
         <td>{{ it.id }}</td>
-        <td>{{ it.first_seen_at.strftime('%Y-%m-%d') }}</td>
+        <td>{{ it.first_seen_at|local_dt('date') }}</td>
         <td>{{ (it.title or '—')[:72] }}</td>
         <td class="tbl-actions"><a href="{{ url_for('admin.items_edit', iid=it.id) }}">Edit</a></td>
       </tr>

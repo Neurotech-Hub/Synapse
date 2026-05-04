@@ -9,7 +9,7 @@
 <p class="muted contextual-note">Recent HTML fingerprints across all sources (newest first).</p>
 <table class="tbl tbl-compact">
   <thead>
-    <tr><th>Source</th><th>Snapshot ID</th><th>Fetched (UTC)</th><th>SHA-256</th></tr>
+    <tr><th>Source</th><th>Snapshot ID</th><th>Fetched</th><th>SHA-256</th></tr>
   </thead>
   <tbody>
   {% for sn, source in rows %}
@@ -20,7 +20,7 @@
         <span class="muted tiny mono"> · {{ source.id }}</span>
       </td>
       <td>{{ sn.id }}</td>
-      <td class="nowrap">{{ sn.fetched_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      <td class="nowrap">{{ sn.fetched_at|local_dt('datetime_sec') }}</td>
       <td class="mono tiny tbl-sha-cell" title="{{ sha }}">{% if sha|length > 12 %}{{ sha[:12] }}…{% else %}{{ sha }}{% endif %}</td>
     </tr>
   {% else %}

@@ -6,6 +6,7 @@ from flask_wtf.csrf import CSRFProtect
 from app.auth import Operator
 from app.config import get_config
 from app.extensions import db, limiter, login_manager, migrate
+from app.jinja_datetime import local_dt_markup
 from app.public_digest.build import normalize_public_digest_summary
 from app.web.admin import admin_bp
 from app.web.public_routes import public_bp
@@ -44,6 +45,15 @@ def create_app(override_config: dict | None = None) -> Flask:
     def _format_public_digest_filter(text):
         return normalize_public_digest_summary("" if text is None else str(text))
 
+    @flask_app.template_filter("local_dt")
+    def _local_dt_filter(dt, style="datetime"):
+        return local_dt_markup(dt, style)
+
     import app.models  # noqa: F401  # register tables with Alembic / SQLAlchemy
+
+    with flask_app.app_context():
+        from app.leads.stuck_reports import reconcile_interrupted_lead_reports
+
+        reconcile_interrupted_lead_reports()
 
     return flask_app

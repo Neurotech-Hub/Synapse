@@ -84,7 +84,7 @@
               {% endif %}
             </td>
             <td class="tbl-col-center">{% if row.stale %}yes{% else %}no{% endif %}</td>
-            <td class="muted">{% if row.last_at %}{{ row.last_at.strftime('%Y-%m-%d %H:%M UTC') }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if row.last_at %}{{ row.last_at|local_dt('datetime') }}{% else %}—{% endif %}</td>
             <td class="tbl-actions">
               <form method="post" action="{{ row.build_url }}" class="inline-form digest-llm-sync-submit">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>

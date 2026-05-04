@@ -2,6 +2,18 @@
 {% import "admin/includes/help_macros.html" as syn_help %}
 {% block title %}Lead reports{% endblock %}
 {% block body %}
+{% if lead_report_busy %}
+<p id="lead-report-run-banner"
+   class="leads-pipeline-run-banner leads-pipeline-run-banner--page-top muted"
+   data-poll-report-status="{{ url_for('admin.lead_report_run_status') }}"
+   {% if active_lead_report_id %}data-active-report-id="{{ active_lead_report_id }}"{% endif %}
+   aria-live="polite">
+  <strong>Running</strong>{% if active_lead_report_id %} — report #{{ active_lead_report_id }}{% endif %}
+  · <span class="lead-report-phase-text">{{ lead_report_phase or 'Starting…' }}</span>
+  <span class="muted"> Watch <code>[lead-report]</code> in the logs below when finished.</span>
+</p>
+{% endif %}
+
 <header class="page-head page-head--compact">
   <h1>Lead reports</h1>
   <div class="page-head-actions">
@@ -14,18 +26,6 @@
     {% call syn_help.tips_bubble() %}{% include "admin/includes/help_leads_list.html" %}{% endcall %}
   </div>
 </header>
-
-{% if lead_report_busy %}
-<p id="lead-report-run-banner"
-   class="leads-pipeline-run-banner muted"
-   data-poll-report-status="{{ url_for('admin.lead_report_run_status') }}"
-   {% if active_lead_report_id %}data-active-report-id="{{ active_lead_report_id }}"{% endif %}
-   aria-live="polite">
-  <strong>Running</strong>{% if active_lead_report_id %} — report #{{ active_lead_report_id }}{% endif %}
-  · <span class="lead-report-phase-text">{{ lead_report_phase or 'Starting…' }}</span>
-  <span class="muted"> Watch <code>[lead-report]</code> in the logs below when finished.</span>
-</p>
-{% endif %}
 
 <dialog id="leads-pipeline-dialog" class="admin-dialog leads-pipeline-settings-dialog" aria-labelledby="leads-pipeline-dialog-title">
   <div class="admin-dialog-sheet">
@@ -63,20 +63,10 @@
       </button>
     </div>
     <div class="admin-dialog-body">
-      <p class="muted contextual-note leads-report-new-intro">Runs in the background (may take minutes). Uses <code>prompts/lead_report_*.txt</code> and Ollama <code>SYNAPSE_LEAD_REPORT_NUM_CTX</code>.</p>
+      <p class="muted contextual-note leads-report-new-intro">Runs in the background (may take minutes). Hub corpus organization is set with the <strong>Hub settings</strong> cog on this page. Uses <code>prompts/lead_report_*.txt</code> and Ollama <code>SYNAPSE_LEAD_REPORT_NUM_CTX</code>.</p>
 
       <form method="post" action="{{ url_for('admin.lead_reports_new') }}" class="admin-form lead-report-new-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-
-        <div class="field-group">
-          <span class="field-label field-label-block">Hub corpus for this run</span>
-          <select name="hub_report_organization_id" id="lr-hub-org" class="field-input">
-            {% for val, label in hub_choices_modal %}
-            <option value="{{ val }}" {% if val|string == (default_hub_organization_id|string if default_hub_organization_id else '') %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-          <p class="muted contextual-note">Blank uses the Hub corpus organization from <strong>Hub settings</strong> on this page.</p>
-        </div>
 
         <fieldset class="field-group">
           <legend class="field-label field-label-block">Subject</legend>
@@ -158,17 +148,15 @@
         {% elif r.target_region %}region · {{ r.target_region.region_name }}
         {% else %}—{% endif %}
       </td>
-      <td class="muted">{{ r.hub_organization.display_name if r.hub_organization else '(from settings)' }}</td>
-      <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td class="muted">{% if r.hub_organization %}{{ r.hub_organization.display_name }}{% else %}—{% endif %}</td>
+      <td>{{ r.created_at|local_dt('datetime') }}</td>
       <td>{{ r.status }}</td>
-      <td>{% if r.reviewed_at %}{{ r.reviewed_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}</td>
+      <td>{% if r.reviewed_at %}{{ r.reviewed_at|local_dt('date') }}{% else %}—{% endif %}</td>
       <td class="tbl-actions">
+        {% if r.status == 'running' %}
+        <span class="muted tbl-action-na" title="Open this report when the run has finished.">View</span>
+        {% else %}
         <a href="{{ url_for('admin.lead_reports_view', rid=r.id) }}">View</a>
-        {% if not r.reviewed_at %}
-        <form method="post" action="{{ url_for('admin.lead_reports_review', rid=r.id) }}" class="inline-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <button type="submit" class="linkish">Mark reviewed</button>
-        </form>
         {% endif %}
       </td>
     </tr>

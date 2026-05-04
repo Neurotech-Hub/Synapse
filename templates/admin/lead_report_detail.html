@@ -4,11 +4,33 @@
 <header class="page-head page-head--compact">
   <h1>Lead report #{{ report.id }}</h1>
 </header>
-<p class="muted contextual-note">{{ subject_label }} · status <strong>{{ report.status }}</strong>
-  · created {{ report.created_at.strftime('%Y-%m-%d %H:%M UTC') }}
-  {% if report.completed_at %}· completed {{ report.completed_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}
-  · Hub {% if report.hub_organization %}{{ report.hub_organization.display_name }}{% else %}(from settings at run time){% endif %}
-</p>
+
+<section class="lead-report-meta-card" aria-label="Report details">
+  <dl class="lead-report-meta-dl">
+    <div class="lead-report-meta-item">
+      <dt>Subject</dt>
+      <dd class="lead-report-meta-subject">{{ subject_label }}</dd>
+    </div>
+    <div class="lead-report-meta-item">
+      <dt>Status</dt>
+      <dd><span class="lead-report-status lead-report-status--{{ report.status }}">{{ report.status }}</span></dd>
+    </div>
+    <div class="lead-report-meta-item">
+      <dt>Created</dt>
+      <dd>{{ report.created_at|local_dt('datetime') }}</dd>
+    </div>
+    {% if report.completed_at %}
+    <div class="lead-report-meta-item">
+      <dt>Completed</dt>
+      <dd>{{ report.completed_at|local_dt('datetime') }}</dd>
+    </div>
+    {% endif %}
+    <div class="lead-report-meta-item">
+      <dt>Hub corpus</dt>
+      <dd>{% if report.hub_organization %}<a href="{{ url_for('admin.organizations_edit', oid=report.hub_organization.id) }}">{{ report.hub_organization.display_name }}</a>{% elif report.status in ('queued', 'running') %}<span class="muted">Recorded when this run starts (from Hub settings)</span>{% else %}<span class="muted">—</span>{% endif %}</dd>
+    </div>
+  </dl>
+</section>
 
 {% if report.error_detail %}
 <section class="review-banner review-banner--approve" aria-label="Error">
@@ -58,35 +80,49 @@
 
 <section class="source-view-section">
   <h2 class="source-view-h2">Review</h2>
-  {% if report.reviewed_at %}
-  <p>Marked reviewed {{ report.reviewed_at.strftime('%Y-%m-%d %H:%M UTC') }}{% if report.review_notes %} — {{ report.review_notes }}{% endif %}</p>
-  <form method="post" action="{{ url_for('admin.lead_reports_review', rid=report.id) }}" class="admin-form">
+  {% if report.status in ('queued', 'running') %}
+  <p class="muted">Mark as reviewed is available after this report finishes (current status: <strong>{{ report.status }}</strong>).</p>
+  <form method="post" action="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" class="admin-form" onsubmit="return confirm('Delete lead report {{ report.id }}?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-    <input type="hidden" name="clear_reviewed" value="1"/>
-    <button type="submit" class="disapprove-btn">Clear reviewed</button>
+    <div class="form-submit-row">
+      <div class="form-submit-primary-actions">
+        <button type="submit" class="danger-btn">Delete report</button>
+      </div>
+    </div>
+  </form>
+  {% elif report.reviewed_at %}
+  <p class="lead-report-reviewed-summary">Marked reviewed {{ report.reviewed_at|local_dt('datetime') }}</p>
+  {% if report.review_notes %}
+  <div class="field-group">
+    <span class="field-label">Review notes</span>
+    <div class="lead-report-reviewed-notes" role="note">{{ report.review_notes }}</div>
+  </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('admin.lead_reports_review', rid=report.id) }}" class="admin-form lead-report-review-actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <div class="form-submit-row">
+      <div class="form-submit-primary-actions">
+        <button type="submit" class="disapprove-btn" name="clear_reviewed" value="1">Clear reviewed</button>
+        <button type="submit" class="danger-btn" formaction="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" formmethod="post" formnovalidate onclick="return confirm('Delete lead report {{ report.id }}?');">Delete report</button>
+      </div>
+    </div>
   </form>
   {% else %}
   <form method="post" action="{{ url_for('admin.lead_reports_review', rid=report.id) }}" class="admin-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <div class="field-group">
-      <label class="field-label" for="review_notes">Notes (optional)</label>
-      <textarea name="review_notes" id="review_notes" class="field-input" rows="3"></textarea>
+      <label class="field-label" for="review_notes">Notes <span class="muted">(optional)</span></label>
+      <textarea name="review_notes" id="review_notes" class="field-input field-input-multiline" rows="5" cols="72" placeholder="Internal notes about this report…"></textarea>
     </div>
-    <button type="submit" class="primary-btn">Mark as reviewed</button>
+    <div class="form-submit-row">
+      <div class="form-submit-primary-actions">
+        <button type="submit" class="primary-btn">Mark as reviewed</button>
+        <button type="submit" class="danger-btn" formaction="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" formmethod="post" formnovalidate onclick="return confirm('Delete lead report {{ report.id }}?');">Delete report</button>
+      </div>
+    </div>
   </form>
   {% endif %}
 </section>
 
-<div class="form-submit-row">
-  <form method="post" action="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" onsubmit="return confirm('Delete lead report {{ report.id }}?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-    <button type="submit" class="danger-btn">Delete report</button>
-  </form>
-  <a href="{{ url_for('admin.leads_list') }}#lead-reports-section" class="back-link">&larr; Back to Leads</a>
-</div>
-
-<style>
-.lead-report-prose { white-space: pre-wrap; line-height: 1.45; }
-.lead-report-route-list li { margin-bottom: 1.25rem; }
-</style>
+<p class="admin-form-foot"><a href="{{ url_for('admin.leads_list') }}#lead-reports-section" class="back-link">&larr; Back to Leads</a></p>
 {% endblock %}

@@ -8,6 +8,7 @@ import pytest
 from app import create_app
 from app.extensions import db
 from app.leads.pipeline_settings import get_singleton
+from app.leads.stuck_reports import reconcile_interrupted_lead_reports
 from app.models import LeadReport, Organization, Person
 
 pytestmark = pytest.mark.usefixtures("_admin_env")
@@ -80,6 +81,8 @@ def test_lead_report_enqueue_without_background_runner(app, client):
         rep = LeadReport.query.filter_by(target_person_id=pid).first()
         assert rep is not None
         assert rep.status == "queued"
+        rep.status = "ok"
+        db.session.commit()
         rid = rep.id
 
     r2 = client.post(
@@ -92,6 +95,54 @@ def test_lead_report_enqueue_without_background_runner(app, client):
         rep2 = db.session.get(LeadReport, rid)
         assert rep2.reviewed_at is not None
         assert rep2.review_notes == "Looks good"
+
+
+def test_reconcile_marks_stuck_running_as_failed(app):
+    with app.app_context():
+        p = Person(slug="stuck_subj", display_name="Stuck Subject", notes=None)
+        db.session.add(p)
+        db.session.flush()
+        lr = LeadReport(
+            target_person_id=int(p.id),
+            status="running",
+            hub_organization_id=None,
+        )
+        db.session.add(lr)
+        db.session.commit()
+        rid = int(lr.id)
+
+        assert reconcile_interrupted_lead_reports() == 1
+        row = db.session.get(LeadReport, rid)
+        assert row is not None
+        assert row.status == "failed"
+        assert "Interrupted" in (row.error_detail or "")
+        assert row.completed_at is not None
+
+        assert reconcile_interrupted_lead_reports() == 0
+
+
+def test_people_roster_excludes_hub_org_members(app):
+    from app.leads.report_pipeline import _people_roster_for_orgs
+
+    with app.app_context():
+        hub = Organization(slug="thehub", display_name="The Hub", notes=None)
+        target = Organization(slug="targetlab", display_name="Target Lab", notes=None)
+        p_hub = Person(slug="hub_member", display_name="Hub Member", notes=None)
+        p_lab_only = Person(slug="lab_only", display_name="Lab Only", notes=None)
+        db.session.add_all([hub, target, p_hub, p_lab_only])
+        db.session.flush()
+        hub.people.append(p_hub)
+        target.people.append(p_hub)
+        target.people.append(p_lab_only)
+        db.session.commit()
+
+        people, _roster = _people_roster_for_orgs([int(target.id)], hub_organization_id=int(hub.id))
+        ids = {p.id for p in people}
+        assert int(p_lab_only.id) in ids
+        assert int(p_hub.id) not in ids
+
+        people2, _ = _people_roster_for_orgs([int(target.id)], hub_organization_id=None)
+        assert int(p_hub.id) in {p.id for p in people2}
 
 
 def test_person_delete_blocked_by_lead_report(app, client):

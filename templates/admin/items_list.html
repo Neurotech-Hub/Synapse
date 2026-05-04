@@ -50,7 +50,7 @@
           {% endif %}
         </span>
       </td>
-      <td class="nowrap">{{ it.first_seen_at.strftime('%Y-%m-%d') }}</td>
+      <td class="nowrap">{{ it.first_seen_at|local_dt('date') }}</td>
       <td class="tbl-items-title-cell"><span title="{{ it.title or '' }}">{{ (it.title or '—')[:180] }}</span></td>
       {% set ext = it.external_id %}
       <td class="mono tiny tbl-ext-id-cell tbl-items-ext-cell" title="{{ ext }}">{{ ext }}</td>

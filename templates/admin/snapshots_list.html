@@ -8,13 +8,13 @@
 </header>
 <p class="muted contextual-note">Source #{{ source.id }} · <span class="cell-url-wrap">{{ source.url }}</span>{% if source.kind == 'rss_feed' %} · RSS ingest{% elif source.kind == 'html_page' %} · HTML snapshots{% endif %}</p>
 <table class="tbl tbl-compact">
-  <thead><tr><th>ID</th><th>Fetched (UTC)</th><th>SHA-256</th></tr></thead>
+  <thead><tr><th>ID</th><th>Fetched</th><th>SHA-256</th></tr></thead>
   <tbody>
   {% for sn in snaps %}
     {% set sha = sn.body_sha256 %}
     <tr>
       <td>{{ sn.id }}</td>
-      <td>{{ sn.fetched_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      <td>{{ sn.fetched_at|local_dt('datetime_sec') }}</td>
       <td class="mono tbl-sha-cell" title="{{ sha }}">{% if sha|length > 12 %}{{ sha[:12] }}…{% else %}{{ sha }}{% endif %}</td>
     </tr>
   {% else %}

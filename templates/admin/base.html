@@ -85,6 +85,7 @@
         {% endfor %}
       {% endwith %}
       {% block body %}{% endblock %}
+      <script src="{{ url_for('static', filename='admin_dt_local.js') }}"></script>
     </div>
   </div>
   <script>

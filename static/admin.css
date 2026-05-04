@@ -427,6 +427,120 @@ body.admin {
   margin: 0;
 }
 
+.tbl-action-na {
+  cursor: not-allowed;
+  user-select: none;
+}
+
+/* Lead report detail */
+.lead-report-meta-card {
+  margin: 0.75rem 0 1.75rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-tight);
+  background: var(--surface);
+}
+
+.lead-report-meta-dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem 1rem;
+}
+
+.lead-report-meta-item {
+  display: grid;
+  grid-template-columns: minmax(6rem, 8.5rem) 1fr;
+  gap: 0.35rem 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 520px) {
+  .lead-report-meta-item {
+    grid-template-columns: 1fr;
+  }
+
+  .lead-report-meta-item dt {
+    margin-bottom: -0.2rem;
+  }
+}
+
+.lead-report-meta-item dt {
+  margin: 0;
+  padding-top: 0.12rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.lead-report-meta-item dd {
+  margin: 0;
+  font-size: 0.94rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.lead-report-meta-subject {
+  font-weight: 500;
+}
+
+.lead-report-status {
+  display: inline-block;
+  padding: 0.14rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lead-report-status--ok {
+  background: rgba(34, 197, 94, 0.16);
+  color: #166534;
+}
+
+.lead-report-status--failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--bad);
+}
+
+.lead-report-status--running,
+.lead-report-status--queued {
+  background: rgba(59, 130, 246, 0.1);
+  color: #1e40af;
+}
+
+.lead-report-prose {
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.lead-report-route-list li {
+  margin-bottom: 1.25rem;
+}
+
+.lead-report-reviewed-summary {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+
+.lead-report-reviewed-notes {
+  margin-top: 0.35rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-tight);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  background: rgba(20, 20, 20, 0.03);
+}
+
+.admin-form.lead-report-review-actions {
+  margin-top: 1rem;
+}
+
 .admin-dialog::backdrop {
   background: rgba(20, 20, 20, 0.38);
   backdrop-filter: blur(2px);
@@ -625,6 +739,13 @@ body.admin {
   border-radius: 8px;
   background: rgba(34, 197, 94, 0.1);
   border: 1px solid rgba(22, 163, 74, 0.24);
+}
+
+/* First content in admin-main (same vertical band as global flashes). */
+.leads-pipeline-run-banner--page-top {
+  margin: 0.75rem 0 0.75rem;
+  padding: 0.62rem 0.92rem;
+  font-size: 0.92rem;
 }
 
 .leads-pipeline-run-banner code {

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any
 
-from sqlalchemy import desc
+from sqlalchemy import desc, select
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -27,7 +27,14 @@ from app.leads.lead_report_budgets import (
 )
 from app.leads.prompt_loader import normalize_prompt_body, prompts_dir
 from app.leads.report_progress import set_lead_report_phase
-from app.models import ContentItem, LeadPipelineSettings, LeadReport, Person, PersonaSnapshot, person_organization
+from app.models import (
+    ContentItem,
+    LeadPipelineSettings,
+    LeadReport,
+    Person,
+    PersonaSnapshot,
+    person_organization,
+)
 
 
 def _report_snippet_block(ci: ContentItem, *, max_chars: int) -> str:
@@ -167,7 +174,11 @@ def _organization_ids_for_report(report: LeadReport) -> tuple[list[int], str]:
     return [], ""
 
 
-def _people_roster_for_orgs(organization_ids: list[int]) -> tuple[list[Person], str]:
+def _people_roster_for_orgs(
+    organization_ids: list[int], *, hub_organization_id: int | None
+) -> tuple[list[Person], str]:
+    """People in scope orgs, excluding anyone also affiliated with the Hub corpus org."""
+
     if not organization_ids:
         return [], "(No organizations in scope.)"
 
@@ -175,9 +186,13 @@ def _people_roster_for_orgs(organization_ids: list[int]) -> tuple[list[Person], 
         Person.query.join(person_organization)
         .filter(person_organization.c.organization_id.in_(organization_ids))
         .distinct()
-        .order_by(Person.display_name.asc())
-        .limit(org_place_persona_summaries_cap())
     )
+    if hub_organization_id is not None:
+        hub_member_ids = select(person_organization.c.person_id).where(
+            person_organization.c.organization_id == int(hub_organization_id)
+        )
+        q = q.filter(Person.id.not_in(hub_member_ids))
+    q = q.order_by(Person.display_name.asc()).limit(org_place_persona_summaries_cap())
     people = q.all()
 
     lines = [_person_compact_line(p.id) for p in people]
@@ -274,7 +289,7 @@ def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> N
     if not subject_label:
         raise ValueError("Report has no organization, building, or region target.")
 
-    people, roster = _people_roster_for_orgs(org_ids)
+    people, roster = _people_roster_for_orgs(org_ids, hub_organization_id=int(hub_org_id))
 
     set_lead_report_phase("Organization / building / region report: gathering Hub + roster…")
     hub_items, hub_block = _hub_items_and_block(hub_organization_id=int(hub_org_id))
@@ -375,6 +390,9 @@ def run_lead_report_job(report_id: int) -> None:
             raise ValueError(
                 "Set Hub corpus organization on the report or under Leads → Hub settings before running."
             )
+
+        report.hub_organization_id = int(hub_oid)
+        db.session.commit()
 
         if report.target_person_id is not None:
             _run_person_report(report, hub_org_id=hub_oid)
