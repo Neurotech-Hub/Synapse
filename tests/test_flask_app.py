@@ -81,7 +81,7 @@ def test_public_submit_and_duplicate(app, client):
         assert row.enabled is True
         assert row.ownership_hint == "organization"
 
-    r2 = client.post("/", data={"url": "https://example.edu/lab", "submit": "Add"})
+    r2 = client.post("/", data={"url": "https://example.edu/lab", "submit": "Add"}, follow_redirects=True)
     assert r2.status_code == 200
     assert b"already" in r2.data.lower()
 
@@ -312,8 +312,7 @@ def test_leads_page_has_pipeline_settings(client):
     )
     r = client.get("/admin/leads")
     assert r.status_code == 200
-    assert b"Hub settings" in r.data
-    assert b"Save Hub settings" in r.data
+    assert b"New Report" in r.data
     assert b"Recent lead report logs" in r.data
 
 

@@ -10,7 +10,6 @@ from urllib.parse import urlencode
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import and_, desc, func, inspect, or_
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.auth import (
@@ -45,7 +44,6 @@ from app.ingest.pipeline import refresh_html_page_content_items
 from app.ingest.poll_progress import is_poll_running, snapshot_poll, start_background_poll
 from app.ingest.urlnorm import canonical_url, origin_section_labels, UrlValidationError, url_origin_group_key
 from app.leads.hub_corpus import hub_corpus_mark_organization_ids, hub_corpus_mark_person_ids, hub_source_ids
-from app.leads.pipeline_settings import get_singleton
 from app.leads.report_pipeline import enqueue_lead_report
 from app.leads.report_progress import (
     active_report_id,
@@ -57,7 +55,6 @@ from app.domain.public_sources import organization_is_publicly_listable, person_
 from app.models import (
     Building,
     ContentItem,
-    LeadPipelineSettings,
     LeadReport,
     Organization,
     Person,
@@ -88,7 +85,6 @@ from app.web.admin import admin_bp
 from app.web.admin.forms import (
     BuildingForm,
     ContentItemForm,
-    LeadPipelineHubForm,
     LoginForm,
     OrganizationForm,
     PersonForm,
@@ -221,11 +217,8 @@ def _building_org_assoc_picker_initials(initial_ids: Iterable[int]) -> dict[str,
 
 
 def _normalized_hub_organization_id() -> int | None:
-    try:
-        raw = getattr(get_singleton(), "hub_organization_id", None)
-        return int(raw) if raw is not None else None
-    except (OperationalError, TypeError, ValueError):
-        return None
+    org = Organization.query.filter_by(is_hub=True).first()
+    return int(org.id) if org is not None else None
 
 
 # --- Boilerplate unchanged from prior admin blueprint ---
@@ -492,15 +485,10 @@ def sources_list():
     content_counts = dict(
         db.session.query(ContentItem.source_id, func.count(ContentItem.id)).group_by(ContentItem.source_id).all()
     )
-    hub_oid = None
-    hub_qualifying_source_ids: set[int] = set()
-    try:
-        pipe = get_singleton()
-        hub_oid = getattr(pipe, "hub_organization_id", None)
-        if hub_oid is not None:
-            hub_qualifying_source_ids = hub_source_ids(hub_organization_id=int(hub_oid))
-    except OperationalError:
-        pass
+    hub_oid = _normalized_hub_organization_id()
+    hub_qualifying_source_ids: set[int] = (
+        hub_source_ids(hub_organization_id=hub_oid) if hub_oid is not None else set()
+    )
 
     layout_raw = (request.args.get("layout") or "").strip().lower()
     sources_layout = "by_site" if layout_raw == "by_site" else "ownership"
@@ -1180,6 +1168,7 @@ def organizations_edit(oid: int):
     if request.method == "GET":
         form.display_name.data = org.display_name
         form.notes.data = org.notes or ""
+        form.is_hub.data = bool(org.is_hub)
 
     if form.validate_on_submit():
         display = (form.display_name.data or "").strip()
@@ -1201,6 +1190,7 @@ def organizations_edit(oid: int):
         org.slug = slug
         org.display_name = display
         org.notes = form.notes.data or None
+        org.is_hub = bool(form.is_hub.data)
 
         set_organization_building(organization=org, building_id=new_bid)
 
@@ -1256,10 +1246,8 @@ def organizations_delete(oid: int):
     if LeadReport.query.filter_by(target_organization_id=oid).first():
         flash("Delete lead reports targeting this organization first.", "error")
         return redirect(url_for("admin.organizations_edit", oid=oid))
-    if LeadPipelineSettings.query.filter_by(hub_organization_id=oid).first() or LeadReport.query.filter_by(
-        hub_organization_id=oid
-    ).first():
-        flash("Clear Hub corpus organization in Lead settings / reports referencing it as Hub before deleting.", "error")
+    if LeadReport.query.filter_by(hub_organization_id=oid).first():
+        flash("Delete or reassign lead reports referencing this organization as Hub before deleting.", "error")
         return redirect(url_for("admin.organizations_edit", oid=oid))
     db.session.delete(org)
     db.session.commit()
@@ -1586,14 +1574,6 @@ def _lead_reports_filtered_query(review: str | None):
 @admin_bp.route("/leads")
 @login_required
 def leads_list():
-    singleton = get_singleton()
-    hub_pipeline_form = LeadPipelineHubForm(obj=singleton)
-    hub_pipeline_form.hub_organization_id.choices = [
-        ("", "— Hub corpus unavailable until an organization exists —"),
-        *[(str(o.id), o.display_name) for o in Organization.query.order_by(Organization.display_name.asc()).all()],
-    ]
-    hub_pipeline_form.hub_organization_id.data = singleton.hub_organization_id
-
     report_review = (request.args.get("report_review") or "").strip().lower()
     if report_review not in ("", "unreviewed", "reviewed"):
         report_review = ""
@@ -1609,7 +1589,6 @@ def leads_list():
     open_report_modal = (request.args.get("open_report_modal") or "").strip().lower() in ("1", "true", "yes")
     return render_template(
         "admin/leads_list.html",
-        hub_pipeline_form=hub_pipeline_form,
         report_logs=report_logs,
         report_rows=report_rows,
         report_review_filter=report_review,
@@ -1621,23 +1600,6 @@ def leads_list():
         lead_report_phase=active_report_phase(),
     )
 
-
-@admin_bp.route("/leads/settings", methods=("POST",))
-@login_required
-def leads_pipeline_settings():
-    row = get_singleton()
-    form = LeadPipelineHubForm(formdata=request.form)
-    form.hub_organization_id.choices = [("", "—")] + [
-        (str(o.id), o.display_name) for o in Organization.query.order_by(Organization.display_name.asc()).all()
-    ]
-    if form.validate_on_submit():
-        row.hub_organization_id = form.hub_organization_id.data
-        db.session.commit()
-        flash("Hub lead settings saved.", "success")
-    else:
-        flash("Could not save Hub settings — check the form.", "error")
-    q = request.args.to_dict(flat=True)
-    return redirect(url_for("admin.leads_list", **q))
 
 
 @admin_bp.route("/leads/report-run-status")

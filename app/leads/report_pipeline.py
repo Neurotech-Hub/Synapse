@@ -16,21 +16,18 @@ from app.domain.region_buildings import building_ids_for_region, ensure_region_b
 from app.identity.evidence import gather_content_items_for_person, chunks_for_prompt
 from app.ingest.html_extract import plaintext_excerpt as _plain_excerpt
 from app.ingest.ollama_client import OLLAMA_MODEL, run_lead_report_llm
-from app.leads.hub_corpus import hub_source_ids
+from app.leads.hub_corpus import hub_persona_context_block, load_hub_persona
 from app.leads.lead_report_budgets import (
     PIPELINE_SEMVER,
-    hub_items_max_default,
-    hub_snippet_chars_default,
     org_place_persona_summaries_cap,
-    person_content_budget_chars,
-    person_owned_items_max,
+    person_short_evidence_items,
 )
 from app.leads.prompt_loader import normalize_prompt_body, prompts_dir
 from app.leads.report_progress import set_lead_report_phase
 from app.models import (
     ContentItem,
-    LeadPipelineSettings,
     LeadReport,
+    Organization,
     Person,
     PersonaSnapshot,
     person_organization,
@@ -53,21 +50,8 @@ def _load_prompt_file(name: str) -> str:
 
 
 def _hub_items_and_block(*, hub_organization_id: int) -> tuple[list[ContentItem], str]:
-    cap = hub_items_max_default()
-    char_cap = hub_snippet_chars_default()
-    contrib = hub_source_ids(hub_organization_id=int(hub_organization_id))
-    if not contrib:
-        return [], ""
-
-    hub_items = (
-        ContentItem.query.filter(ContentItem.source_id.in_(contrib))
-        .options(joinedload(ContentItem.source))
-        .order_by(desc(ContentItem.first_seen_at))
-        .limit(cap)
-        .all()
-    )
-    blk = "\n\n---\n\n".join(_report_snippet_block(h, max_chars=char_cap) for h in hub_items)
-    return hub_items, blk
+    """Deprecated: hub context now comes from hub_persona.json, not ContentItems."""
+    return [], ""
 
 
 def _fingerprint_hub_target(
@@ -93,33 +77,28 @@ def _fingerprint_hub_target(
 
 
 def _person_target_block(person: Person) -> tuple[list[ContentItem], str, str]:
-    """Owned evidence list, chunked prompt block, persona synopsis."""
+    """Short evidence window + full persona JSON (persona-first lead gen)."""
 
-    items = gather_content_items_for_person(person, limit=int(person_owned_items_max()))
-    chunk = chunks_for_prompt(items)
-    bud = max(4000, int(person_content_budget_chars()))
-    if len(chunk) > bud:
-        chunk = _plain_excerpt(chunk, bud)
+    items = gather_content_items_for_person(person, limit=int(person_short_evidence_items()))
+    evidence_block = chunks_for_prompt(items)
 
-    synopsis = "(no persona snapshot available.)"
+    persona_json_str = "(no persona snapshot)"
     ps = PersonaSnapshot.query.filter_by(person_id=person.id).first()
     if ps and ps.build_status == "ok":
-        bullets: list[str] = []
-        for label, fld in (
-            ("focus", ps.research_focus),
-            ("methods", ps.methods),
-            ("keywords", ps.keywords[:12] if ps.keywords else []),
-        ):
-            if isinstance(fld, list) and fld:
-                bits = "; ".join(str(x).strip() for x in fld[:8] if str(x).strip())
-                if bits:
-                    bullets.append(f"{label}: {bits}")
-        if ps.collab_openness_score is not None:
-            bullets.append(f"collab_openness_score: {float(ps.collab_openness_score):.2f}")
-        if bullets:
-            synopsis = "\n".join(bullets)
+        persona_dict: dict[str, Any] = {
+            "research_focus": ps.research_focus or [],
+            "methods": ps.methods or [],
+            "keywords": ps.keywords or [],
+            "current_projects": ps.current_projects or [],
+            "funding_signals": ps.funding_signals or [],
+            "hardware_interests": ps.hardware_interests or [],
+            "infrastructure_needs": ps.infrastructure_needs or [],
+            "collab_openness_score": ps.collab_openness_score,
+            "notes": ps.notes or "",
+        }
+        persona_json_str = json.dumps(persona_dict, ensure_ascii=False)
 
-    return items, chunk, synopsis
+    return items, evidence_block, persona_json_str
 
 
 def _sanitize_id_list(vals: Any, *, allowed: set[int]) -> list[int]:
@@ -195,11 +174,12 @@ def _people_roster_for_orgs(
     q = q.order_by(Person.display_name.asc()).limit(org_place_persona_summaries_cap())
     people = q.all()
 
-    lines = [_person_compact_line(p.id) for p in people]
+    lines = [_person_rich_stub(p.id) for p in people]
     return people, "\n".join(lines) if lines else "(no affiliated people captured.)"
 
 
-def _person_compact_line(person_id: int) -> str:
+def _person_rich_stub(person_id: int) -> str:
+    """Rich persona stub for org/building lead report rosters."""
     p = db.session.get(Person, person_id)
     tag = "unknown"
     if p:
@@ -214,9 +194,20 @@ def _person_compact_line(person_id: int) -> str:
         if ps.collab_openness_score is not None:
             bits.append(f"collab_score={float(ps.collab_openness_score):.2f}")
         if isinstance(ps.keywords, list):
-            kw = " ".join(str(x).strip() for x in ps.keywords[:10] if str(x).strip())
+            kw = " ".join(str(x).strip() for x in ps.keywords[:8] if str(x).strip())
             if kw:
                 bits.append(f"keywords={kw}")
+        hw = ps.hardware_interests or []
+        if isinstance(hw, list) and hw:
+            bits.append(f"hardware=[{'; '.join(str(x).strip() for x in hw[:2] if str(x).strip())}]")
+        infra = ps.infrastructure_needs or []
+        if isinstance(infra, list) and infra:
+            bits.append(f"infra=[{'; '.join(str(x).strip() for x in infra[:2] if str(x).strip())}]")
+        proj = ps.current_projects or []
+        if isinstance(proj, list) and proj:
+            bits.append(f"projects=[{'; '.join(str(x).strip() for x in proj[:3] if str(x).strip())}]")
+        if ps.notes:
+            bits.append(f"notes={ps.notes[:200].strip()}")
     extra = (" " + " ".join(bits)) if bits else ""
     return f"- {tag}{extra}".strip()
 
@@ -226,62 +217,68 @@ def _run_person_report(report: LeadReport, *, hub_org_id: int) -> None:
     if person is None:
         raise ValueError("Target person missing")
 
-    set_lead_report_phase("Person report: gathering Hub + owned context…")
-    hub_items, hub_block = _hub_content_block_hub_only(hub_org_id)
-    if not hub_items:
-        raise ValueError("Hub corpus produced no ingest items — check Hub organization corpus sources.")
+    set_lead_report_phase("Person report: loading hub persona + gathering target evidence…")
+    hp = load_hub_persona()
 
-    owned_items, target_block, persona_blob = _person_target_block(person)
-    allowed_hub = {h.id for h in hub_items}
+    owned_items, target_evidence_block, persona_json_str = _person_target_block(person)
     allowed_tgt = {c.id for c in owned_items}
 
     report.input_fingerprint = _fingerprint_hub_target(
-        hub_ids=sorted(allowed_hub),
+        hub_ids=[],
         target_person_id=person.id,
         target_organization_id=None,
         target_building_id=None,
         target_region_id=None,
     )
 
-    p1_raw = normalize_prompt_body(
+    prompt_raw = normalize_prompt_body(
         _load_prompt_file("lead_report_person_synthesis.txt")
-        .replace("{{hub_context}}", hub_block or "(empty)")
-        .replace("{{target_context}}", target_block or "(empty)")
-        .replace("{{persona_context}}", persona_blob)
+        .replace("{{hub_long_agent_prompt}}", hp.get("long_agent_prompt", ""))
+        .replace("{{hub_fit_scoring}}", json.dumps(hp.get("lead_fit_scoring", {}), ensure_ascii=False))
+        .replace("{{hub_signals}}", json.dumps(hp.get("signals", {}), ensure_ascii=False))
+        .replace(
+            "{{hub_outreach_email_pattern}}",
+            hp.get("outreach_strategy", {}).get("email_pattern", {}).get("body", ""),
+        )
+        .replace("{{persona_json}}", persona_json_str)
+        .replace("{{target_evidence}}", target_evidence_block or "(empty)")
     )
 
-    set_lead_report_phase("Person report: synthesis (LLM, step 1 of 2)…")
-    synth = run_lead_report_llm(p1_raw, json_format=True)
-    if synth is None:
-        raise RuntimeError("Synthesis LLM returned no usable JSON/object — try SYNAPSE_LEAD_REPORT_NUM_CTX.")
+    set_lead_report_phase("Person report: single-pass synthesis (LLM)…")
+    data = run_lead_report_llm(prompt_raw, json_format=True)
+    if data is None:
+        raise RuntimeError("Synthesis LLM returned no usable JSON — try SYNAPSE_LEAD_REPORT_NUM_CTX.")
 
-    exe = synth.get("executive_summary") if isinstance(synth, dict) else None
+    exe = data.get("executive_summary") if isinstance(data, dict) else None
     if not isinstance(exe, str) or not exe.strip():
-        exe = json.dumps(synth, ensure_ascii=False)[:32000]
+        exe = json.dumps(data, ensure_ascii=False)[:32000]
 
-    summary_text = exe.strip() or "(Synthesis omitted — model returned unusable prose.)"
+    routes = _normalize_routes(data, hub_ids=set(), target_ids=allowed_tgt)
 
-    p2_raw = normalize_prompt_body(
-        _load_prompt_file("lead_report_person_routes.txt")
-        .replace("{{executive_summary}}", summary_text)
-        .replace("{{hub_context}}", hub_block or "(empty)")
-        .replace("{{target_context}}", target_block or "(empty)")
-    )
+    raw_fit = data.get("fit_score")
+    fit_score: float | None = None
+    if isinstance(raw_fit, (int, float)):
+        fit_score = max(0.0, min(1.0, float(raw_fit)))
 
-    set_lead_report_phase("Person report: collaboration routes (LLM, step 2 of 2)…")
-    parsed2 = run_lead_report_llm(p2_raw, json_format=True)
-    routes: list[dict[str, Any]] = []
-    if isinstance(parsed2, dict):
-        routes = _normalize_routes(parsed2, hub_ids=allowed_hub, target_ids=allowed_tgt)
+    email_draft_val = str(data.get("email_draft") or "").strip() or None
 
-    report.executive_summary = summary_text
+    raw_pos = data.get("positive_signals")
+    positive_signals_val = [str(s).strip() for s in raw_pos if str(s).strip()] if isinstance(raw_pos, list) else []
+
+    raw_unc = data.get("uncertainties")
+    uncertainties_val = [str(s).strip() for s in raw_unc if str(s).strip()] if isinstance(raw_unc, list) else []
+
+    likely_pain = str(data.get("likely_technical_pain") or "").strip() or None
+
+    report.executive_summary = exe.strip() or "(Synthesis omitted.)"
     report.collaboration_routes_json = json.dumps(routes, ensure_ascii=False)
     report.ranked_contacts_json = None
     report.model_used = OLLAMA_MODEL
-
-
-def _hub_content_block_hub_only(hub_org_id: int) -> tuple[list[ContentItem], str]:
-    return _hub_items_and_block(hub_organization_id=int(hub_org_id))
+    report.fit_score = fit_score
+    report.email_draft = email_draft_val
+    report.positive_signals = positive_signals_val
+    report.uncertainties = uncertainties_val
+    report.likely_technical_pain = likely_pain
 
 
 def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> None:
@@ -291,16 +288,12 @@ def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> N
 
     people, roster = _people_roster_for_orgs(org_ids, hub_organization_id=int(hub_org_id))
 
-    set_lead_report_phase("Organization / building / region report: gathering Hub + roster…")
-    hub_items, hub_block = _hub_items_and_block(hub_organization_id=int(hub_org_id))
-    if not hub_items:
-        raise ValueError("Hub corpus produced no ingest items — check Hub organization corpus sources.")
-
-    allowed_hub = {h.id for h in hub_items}
+    set_lead_report_phase("Organization / building / region report: loading hub persona + roster…")
+    hub_context = hub_persona_context_block()
     allowed_people_ids = {p.id for p in people}
 
     report.input_fingerprint = _fingerprint_hub_target(
-        hub_ids=sorted(allowed_hub),
+        hub_ids=[],
         target_person_id=None,
         target_organization_id=report.target_organization_id,
         target_building_id=report.target_building_id,
@@ -310,7 +303,7 @@ def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> N
     tmpl = normalize_prompt_body(_load_prompt_file("lead_report_organization_place.txt"))
     prompt = (
         tmpl.replace("{{subject_label}}", subject_label)
-        .replace("{{hub_context}}", hub_block or "(empty)")
+        .replace("{{hub_context}}", hub_context)
         .replace("{{people_roster}}", roster)
     )
 
@@ -323,9 +316,7 @@ def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> N
     if not isinstance(exe, str) or not exe.strip():
         exe = ""
 
-    tgt_empty: set[int] = set()
-
-    routes = _normalize_routes(data, hub_ids=allowed_hub, target_ids=tgt_empty)
+    routes = _normalize_routes(data, hub_ids=set(), target_ids=set())
     for r in routes:
         r.pop("target_evidence_refs", None)
 
@@ -365,9 +356,8 @@ def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> N
 def effective_hub_organization_id(report: LeadReport) -> int | None:
     if report.hub_organization_id is not None:
         return int(report.hub_organization_id)
-    row = db.session.get(LeadPipelineSettings, 1)
-    hid = getattr(row, "hub_organization_id", None) if row else None
-    return int(hid) if hid is not None else None
+    org = Organization.query.filter_by(is_hub=True).first()
+    return int(org.id) if org is not None else None
 
 
 def run_lead_report_job(report_id: int) -> None:

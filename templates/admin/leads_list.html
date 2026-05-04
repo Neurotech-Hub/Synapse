@@ -18,41 +18,12 @@
   <h1>Lead reports</h1>
   <div class="page-head-actions">
     <div class="leads-pipeline-head-split" role="group" aria-label="Lead reports">
-      <button type="button" class="primary-btn primary-btn-compact leads-pipeline-run-btn--split-main" data-lead-report-dialog-open>New Report</button>
-      <button type="button" class="leads-pipeline-settings-trigger" data-leads-pipeline-dialog-open aria-label="Hub settings" title="Hub settings">
-        <svg class="leads-pipeline-settings-trigger-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-      </button>
+      <button type="button" class="primary-btn primary-btn-compact" data-lead-report-dialog-open>New Report</button>
     </div>
     {% call syn_help.tips_bubble() %}{% include "admin/includes/help_leads_list.html" %}{% endcall %}
   </div>
 </header>
 
-<dialog id="leads-pipeline-dialog" class="admin-dialog leads-pipeline-settings-dialog" aria-labelledby="leads-pipeline-dialog-title">
-  <div class="admin-dialog-sheet">
-    <div class="admin-dialog-head">
-      <h2 id="leads-pipeline-dialog-title" class="admin-dialog-title">Hub settings</h2>
-      <button type="button" class="admin-dialog-close" data-leads-pipeline-dialog-close aria-label="Close">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-      </button>
-    </div>
-    <div class="admin-dialog-body">
-      <form method="post" action="{{ url_for('admin.leads_pipeline_settings', **request.args.to_dict(flat=True)) }}" class="admin-form leads-pipeline-form">
-        {{ hub_pipeline_form.hidden_tag() }}
-        <div class="leads-pipeline-form-stack">
-          <p class="muted contextual-note">Report prompts and evidence budgets: <code>prompts/lead_report_*.txt</code>, <code>app/leads/lead_report_budgets.py</code>, and Ollama <code>SYNAPSE_LEAD_REPORT_NUM_CTX</code>.</p>
-          <div class="field-group leads-pipeline-field">
-            {{ hub_pipeline_form.hub_organization_id.label(class_='field-label') }}
-            <p class="field-hint muted">{{ hub_pipeline_form.hub_organization_id.description }}</p>
-            {{ hub_pipeline_form.hub_organization_id(class_='field-input') }}
-          </div>
-        </div>
-        <div class="form-submit-row leads-pipeline-submit">
-          {{ hub_pipeline_form.submit(class_='primary-btn primary-btn-compact') }}
-        </div>
-      </form>
-    </div>
-  </div>
-</dialog>
 
 <dialog id="lead-report-new-dialog" class="admin-dialog leads-report-new-dialog" aria-labelledby="lead-report-new-dialog-title">
   <div class="admin-dialog-sheet">
@@ -63,7 +34,7 @@
       </button>
     </div>
     <div class="admin-dialog-body">
-      <p class="muted contextual-note leads-report-new-intro">Runs in the background (may take minutes). Hub corpus organization is set with the <strong>Hub settings</strong> cog on this page. Uses <code>prompts/lead_report_*.txt</code> and Ollama <code>SYNAPSE_LEAD_REPORT_NUM_CTX</code>.</p>
+      <p class="muted contextual-note leads-report-new-intro">Runs in the background (may take minutes). The Hub organization is designated by the <strong>is_hub flag</strong> on the organization edit page. Uses <code>prompts/lead_report_*.txt</code> and Ollama <code>SYNAPSE_LEAD_REPORT_NUM_CTX</code>.</p>
 
       <form method="post" action="{{ url_for('admin.lead_reports_new') }}" class="admin-form lead-report-new-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -181,14 +152,6 @@
       });
     });
   }
-  var hubDlg = document.getElementById("leads-pipeline-dialog");
-  wireBackdropClose(hubDlg, "[data-leads-pipeline-dialog-close]");
-  document.querySelectorAll("[data-leads-pipeline-dialog-open]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      if (hubDlg && hubDlg.showModal) hubDlg.showModal();
-    });
-  });
-
   var reportDlg = document.getElementById("lead-report-new-dialog");
   wireBackdropClose(reportDlg, "[data-lead-report-dialog-close]");
   function openReportDlg() {

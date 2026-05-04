@@ -159,13 +159,7 @@ def index():
                 "That link is already in our database — we’re already tracking it.",
                 "info",
             )
-            return render_template(
-                "public/index.html",
-                form=form,
-                nav_active="home",
-                latest_groups=latest_groups,
-                filter_label=filter_label,
-            )
+            return redirect(url_for("public.index"))
 
         oh = (form.ownership_intent.data or "").strip().lower()
         ownership_hint = oh if oh in ("person", "organization") else None

@@ -20,7 +20,6 @@
   {% set snapshots_all_active = ep == 'admin.snapshots_all' %}
   {% set people_active = ep is not none and ep.startswith('admin.people_') %}
   {% set organizations_active = ep is not none and ep.startswith('admin.organizations_') %}
-  {% set places_active = ep is not none and (ep.startswith('admin.buildings_') or ep.startswith('admin.places_') or ep.startswith('admin.regions_')) %}
   <div class="admin-shell">
     <aside class="admin-sidebar" aria-label="Admin menu">
       <div class="admin-sidebar-top">
@@ -30,9 +29,6 @@
           <hr class="admin-sidebar-rule" aria-hidden="true"/>
           <a href="{{ url_for('admin.people_list') }}" class="admin-sidebar-link{% if people_active %} is-active{% endif %}" {% if people_active %}aria-current="page"{% endif %}>People</a>
           <a href="{{ url_for('admin.organizations_list') }}" class="admin-sidebar-link{% if organizations_active %} is-active{% endif %}" {% if organizations_active %}aria-current="page"{% endif %}>Organizations</a>
-          <span class="admin-sidebar-nav-label muted" style="display:block;font-size:0.72rem;margin:0.35rem 0 0.15rem;text-transform:uppercase;letter-spacing:0.06em;">Places</span>
-          <a href="{{ url_for('admin.buildings_list') }}" class="admin-sidebar-link admin-sidebar-link--sub{% if ep is not none and (ep.startswith('admin.buildings_') or ep.startswith('admin.places_')) %} is-active{% endif %}" {% if ep is not none and (ep.startswith('admin.buildings_') or ep.startswith('admin.places_')) %}aria-current="page"{% endif %}>Buildings</a>
-          <a href="{{ url_for('admin.regions_list') }}" class="admin-sidebar-link admin-sidebar-link--sub{% if ep is not none and ep.startswith('admin.regions_') %} is-active{% endif %}" {% if ep is not none and ep.startswith('admin.regions_') %}aria-current="page"{% endif %}>Regions</a>
           <div class="admin-sidebar-group">
             <a href="{{ url_for('admin.sources_list') }}" class="admin-sidebar-link admin-sidebar-link--primary{% if sources_active %} is-active{% endif %}" {% if sources_active %}aria-current="page"{% endif %}>Sources</a>
             <ul class="admin-sidebar-sub" role="list">
@@ -43,6 +39,9 @@
                 <a href="{{ url_for('admin.snapshots_all') }}" class="admin-sidebar-link admin-sidebar-link--sub{% if snapshots_all_active %} is-active{% endif %}" {% if snapshots_all_active %}aria-current="page"{% endif %}>Snapshots</a>
               </li>
             </ul>
+            <span class="admin-sidebar-nav-label muted" style="display:block;font-size:0.72rem;margin:0.55rem 0 0.15rem;text-transform:uppercase;letter-spacing:0.06em;">Places</span>
+            <a href="{{ url_for('admin.buildings_list') }}" class="admin-sidebar-link admin-sidebar-link--sub{% if ep is not none and (ep.startswith('admin.buildings_') or ep.startswith('admin.places_')) %} is-active{% endif %}" {% if ep is not none and (ep.startswith('admin.buildings_') or ep.startswith('admin.places_')) %}aria-current="page"{% endif %}>Buildings</a>
+            <a href="{{ url_for('admin.regions_list') }}" class="admin-sidebar-link admin-sidebar-link--sub{% if ep is not none and ep.startswith('admin.regions_') %} is-active{% endif %}" {% if ep is not none and ep.startswith('admin.regions_') %}aria-current="page"{% endif %}>Regions</a>
           </div>
           <hr class="admin-sidebar-rule" aria-hidden="true"/>
           <a href="{{ url_for('admin.leads_list') }}" class="admin-sidebar-link{% if leads_active %} is-active{% endif %}" {% if leads_active %}aria-current="page"{% endif %}>Leads</a>

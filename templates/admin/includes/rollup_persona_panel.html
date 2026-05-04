@@ -6,7 +6,7 @@
         <h2 id="rollup-persona-heading" class="persona-dash-heading">Rollup persona — <strong>{{ subject_title }}</strong></h2>
         <form method="post" action="{{ refresh_endpoint }}" class="persona-dash-refresh" id="rollup-persona-refresh-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-          <button type="submit" class="primary-btn-inline persona-dash-refresh-btn" data-rollups-refresh-submit>Rebuild rollup</button>
+          <button type="submit" class="primary-btn-inline persona-dash-refresh-btn" data-rollups-refresh-submit>{% if organization and organization.is_hub %}Re-sync from file{% else %}Rebuild rollup{% endif %}</button>
         </form>
       </div>
       {% if identity_row and identity_row.build_status == 'ok' %}
@@ -20,6 +20,11 @@
       {% endif %}
     </header>
 
+    {% if organization and organization.is_hub %}
+    <div class="persona-dash-notice persona-dash-notice--info" role="status">
+      <p class="persona-dash-notice-msg">Persona is synced from <code>hub_persona.json</code> — the LLM is not called and connected sources do not affect the persona. "Re-sync from file" refreshes from the file.</p>
+    </div>
+    {% endif %}
     <div class="persona-dash-body">
       {% if not identity_row %}
       <p class="muted persona-dash-empty">No rollup yet — <strong>Rebuild rollup</strong> after member personas exist.</p>
@@ -36,8 +41,8 @@
       </div>
       {% else %}
       <div class="persona-dash-kpis" role="presentation">
-        <div class="persona-kpi">
-          <span class="persona-kpi-label">Collaboration</span>
+        <div class="persona-kpi" title="Openness score (0–1): LLM-inferred rollup of member collaboration signals. Not an NTH lead-fit score.">
+          <span class="persona-kpi-label">Openness</span>
           <span class="persona-kpi-value">{% if identity_row.collab_openness_score is not none %}{{ identity_row.collab_openness_score | round(2) }}{% else %}—{% endif %}</span>
         </div>
         <div class="persona-kpi persona-kpi--text">

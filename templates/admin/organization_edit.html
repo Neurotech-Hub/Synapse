@@ -8,9 +8,9 @@
   {% call syn_help.tips_bubble() %}{% include "admin/includes/help_organization_edit.html" %}{% endcall %}
 </header>
 
-{% if organization and hub_organization_id is not none and organization.id == hub_organization_id %}
+{% if organization and organization.is_hub %}
 <p class="hub-corpus-banner contextual-note" role="status">
-  This organization is the configured <strong>Hub corpus organization</strong>. Adjust under <a href="{{ url_for('admin.leads_list') }}">Leads</a> before deleting.</p>
+  This is the <strong>Hub organization</strong>. Uncheck "Hub organization" below before deleting.</p>
 {% endif %}
 
 {% if organization %}
@@ -31,6 +31,15 @@
     {{ form.notes.label(class_='field-label') }}
     {{ form.notes(class_='field-input field-input-multiline', rows=6, cols=72) }}
     {{ fm.field_errors(form.notes) }}
+  </div>
+  <div class="field-group">
+    <label class="field-label field-label-checkbox">
+      {{ form.is_hub() }} {{ form.is_hub.label.text }}
+    </label>
+    <p class="field-hint muted">When checked, this organization's persona is populated from
+    <code>data/hub_persona.json</code> on every rebuild — the LLM is not called and connected
+    sources do not affect the persona. Sources may still be attached for public-facing content.
+    Only one organization should have this enabled.</p>
   </div>
 
   {% if organization %}

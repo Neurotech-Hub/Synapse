@@ -23,7 +23,7 @@ from app.ingest.html_extract import (
 from app.ingest.ollama_client import html_page_llm_prompt_char_budget, try_summarize_html_page
 from app.ingest.rss import fetch_feed, iter_entries
 from app.ingest.urlnorm import stable_catalog_url
-from app.identity.staleness import mark_identity_stale_from_xor_change
+from app.identity.staleness import mark_identity_stale_for_org_bundle, mark_identity_stale_from_xor_change
 from app.models import ContentItem, PollLog, Source, SourceSnapshot
 from app.public_feed.curate import clear_public_feed_curation
 from app.public_digest.staleness import apply_public_digest_stale_flags, collect_stale_targets_for_source
@@ -309,6 +309,8 @@ def run_poll(*, on_source_step: PollStepCallback | None = None) -> PollLog:
                         phase="done", index=i, total=total, source=s, ok=False, message=err_line
                     )
         apply_public_digest_stale_flags(person_ids=stale_person_ids, org_ids=stale_org_ids)
+        for oid in sorted(stale_org_ids):
+            mark_identity_stale_for_org_bundle(int(oid))
         db.session.commit()
     except Exception:
         db.session.rollback()

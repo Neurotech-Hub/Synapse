@@ -1,19 +1,28 @@
-You prepare the first drafting pass for a Hub ↔ researcher collaboration dossier.
+{{hub_long_agent_prompt}}
 
-You receive recent Hub ingest snippets (labeled CONTENT_ITEM_ID) and the person's owned ingest evidence plus an optional distilled persona excerpt. Produce a substantive narrative—not marketing language—that explains where Hub capabilities intersect the person's evident work themes.
+LEAD FIT SCORING RUBRIC (apply this exactly):
+{{hub_fit_scoring}}
 
-Return ONLY compact JSON without markdown fences.
-Keys exactly:
-- executive_summary (string, multi-paragraph allowed; cite concrete modalities, tooling, timelines, consortiums/method jargon when evidenced in the excerpts; cite CONTENT_ITEM_ID numbers inline like [CID:123] sparingly where it strengthens traceability.)
+IDEAL COLLABORATOR SIGNALS AND WEAK SIGNALS:
+{{hub_signals}}
 
-Hub corpus excerpts:
+OUTREACH EMAIL PATTERN TO FOLLOW:
+{{hub_outreach_email_pattern}}
 
-{{hub_context}}
+TARGET RESEARCHER PERSONA (pre-extracted JSON — use as primary evidence of this person's work):
+{{persona_json}}
 
-Target person's evidence (owned sources):
+RECENT SOURCE EVIDENCE FROM TARGET (newest first, ≤15 items; use CONTENT_ITEM_ID integers in target_evidence_refs):
+{{target_evidence}}
 
-{{target_context}}
-
-Optional persona synopsis (may be empty):
-
-{{persona_context}}
+Return ONLY compact JSON without markdown fences. Keys exactly:
+- executive_summary (string: multi-paragraph narrative explaining Hub ↔ researcher alignment; cite concrete modalities, hardware, methods, timelines, tooling when evidenced; be specific and technical, not generic)
+- fit_score (float 0.00–1.00, apply the rubric above across all six dimensions)
+- score_rationale (string: 1–2 sentences explaining the score using rubric dimension language)
+- positive_signals (array of strings: concrete, specific evidence items that increase fit)
+- uncertainties (array of strings: gaps, inferences, or factors that could lower fit)
+- likely_technical_pain (string: the most probable engineering or instrumentation bottleneck this person faces)
+- relevant_hub_capabilities (array of strings: Hub capability domain names most applicable)
+- proof_points_to_mention (array of strings: Hub proof point names that would resonate)
+- collaboration_routes (array ≤5 objects, each with keys: title, why, next_step, target_evidence_refs[int])
+- email_draft (string: personalized outreach following the email pattern above; be specific to this person's work and inferred bottleneck)

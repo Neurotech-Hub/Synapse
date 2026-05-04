@@ -4,20 +4,21 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import desc
 from sqlalchemy.orm import joinedload
 
-from app.domain.effective_sources import source_ids_for_organization
+from app.domain.effective_sources import identity_eligible_source_ids_for_organization
 from app.domain.entity_associations import organization_ids_for_building
 from app.extensions import db
 from app.identity.builder import IDENTITY_PROMPT_VERSION, apply_parsed_persona_payload
 from app.identity.prompt import build_organization_persona_prompt, build_place_persona_prompt
 from app.ingest.html_extract import plaintext_excerpt as _plaintext_excerpt
 from app.ingest.ollama_client import OLLAMA_MODEL, run_identity_llm
-from app.models import Building, ContentItem, Organization, Person, PersonaSnapshot
+from app.models import Building, ContentItem, Organization, Person, PersonaSnapshot, Source
 
 
 def _persona_mini_dict(sn: PersonaSnapshot | None) -> dict[str, Any]:
@@ -30,26 +31,145 @@ def _persona_mini_dict(sn: PersonaSnapshot | None) -> dict[str, Any]:
         "current_projects": sn.current_projects or [],
         "funding_signals": sn.funding_signals or [],
         "collab_openness_score": sn.collab_openness_score,
+        "hardware_interests": sn.hardware_interests or [],
+        "infrastructure_needs": sn.infrastructure_needs or [],
         "notes": sn.notes or "",
     }
 
 
+def sync_hub_persona_from_file(org: Organization) -> dict[str, Any]:
+    """Populate PersonaSnapshot for the hub org from hub_persona.json (no LLM call)."""
+
+    from app.leads.hub_corpus import load_hub_persona
+
+    hp = load_hub_persona()
+    caps = hp.get("capabilities", {})
+
+    research_focus = [domain_data.get("summary", key) for key, domain_data in caps.items()]
+
+    methods: list[str] = []
+    for domain_data in caps.values():
+        for cap in domain_data.get("capabilities", [])[:2]:
+            if cap not in methods:
+                methods.append(cap)
+    methods = methods[:16]
+
+    current_projects = [pp["name"] for pp in hp.get("proof_points", [])[:8]]
+    keywords = hp.get("voice", {}).get("use_vocabulary", [])[:12]
+
+    entity = hp.get("entity", {})
+    mission = hp.get("mission", {})
+    notes_raw = f"{entity.get('short_positioning', '')} {mission.get('summary', '')}".strip()
+    notes = notes_raw[:600]
+
+    hardware_interests: list[str] = []
+    for domain in ("electronics_and_pcb", "embedded_systems", "bio_clinical_translational"):
+        for ex in caps.get(domain, {}).get("example_use_cases", [])[:3]:
+            if ex not in hardware_interests:
+                hardware_interests.append(ex)
+    hardware_interests = hardware_interests[:8]
+
+    sw_cloud = caps.get("software_apps_cloud", {})
+    infrastructure_needs = sw_cloud.get("capabilities", [])[:6]
+
+    gen_at = datetime.now(timezone.utc)
+    row = org.persona
+    if row is None:
+        row = PersonaSnapshot(organization_id=org.id)
+        db.session.add(row)
+        org.persona = row
+
+    row.research_focus = research_focus
+    row.methods = methods
+    row.keywords = keywords
+    row.current_projects = current_projects
+    row.funding_signals = []
+    row.collab_openness_score = 1.0
+    row.hardware_interests = hardware_interests
+    row.infrastructure_needs = infrastructure_needs
+    row.notes = notes
+    row.paper_count_last_90d = 0
+    row.raw_papers_snapshot = []
+    row.sources_last_scanned = {}
+    row.build_status = "ok"
+    row.build_error = None
+    row.generated_at = gen_at
+    row.model_used = "hub_persona.json"
+    row.prompt_version = IDENTITY_PROMPT_VERSION
+    row.input_fingerprint = hp.get("schema_version", "1.0")
+    row.updated_at = gen_at
+    db.session.commit()
+    return {"organization_id": org.id, "status": "ok", "detail": "synced from hub_persona.json"}
+
+
+def _content_item_excerpt_lines(items: Iterable[ContentItem], excerpt_chars: int) -> list[str]:
+    lines: list[str] = []
+    for ci in items:
+        tit = (ci.title or "").strip()
+        sn = _plaintext_excerpt(ci.snippet or "", excerpt_chars).strip()
+        lines.append(f"title={tit}\nexcerpt={sn}")
+    return lines
+
+
 def _thin_excerpts_for_org(organization_id: int, *, cap_items: int = 24, excerpt_chars: int = 800) -> str:
-    sids = source_ids_for_organization(int(organization_id))
-    if not sids:
+    """Prefer content from sources attached directly to the org (official site/feeds) over member RSS floods."""
+
+    oid = int(organization_id)
+    eligible = identity_eligible_source_ids_for_organization(oid)
+    if not eligible:
         return "(none)"
+
+    org_owned_ids = [
+        int(r[0])
+        for r in Source.query.with_entities(Source.id)
+        .filter(Source.organization_id == oid, Source.id.in_(eligible))
+        .order_by(Source.id.asc())
+        .all()
+    ]
+    org_set = set(org_owned_ids)
+    member_ids = [sid for sid in eligible if sid not in org_set]
+
+    if org_owned_ids:
+        # When the org has its own sources, reserve most of the budget for them and cap member items so
+        # one PI's feed cannot drown out the department website (html_page often has a single ContentItem).
+        member_cap = min(10, max(4, cap_items // 4))
+        org_limit = max(1, cap_items - member_cap)
+        org_items = (
+            ContentItem.query.filter(ContentItem.source_id.in_(org_owned_ids))
+            .order_by(desc(ContentItem.first_seen_at))
+            .limit(org_limit)
+            .all()
+        )
+        org_chars = min(2400, int(excerpt_chars) * 3)
+        org_lines = _content_item_excerpt_lines(org_items, org_chars)
+        mem_lines: list[str] = []
+        remaining = cap_items - len(org_lines)
+        if remaining > 0 and member_ids:
+            member_cap_eff = min(remaining, member_cap)
+            mem_items = (
+                ContentItem.query.filter(ContentItem.source_id.in_(member_ids))
+                .order_by(desc(ContentItem.first_seen_at))
+                .limit(member_cap_eff)
+                .all()
+            )
+            mem_lines = _content_item_excerpt_lines(mem_items, excerpt_chars)
+        parts: list[str] = []
+        if org_lines:
+            parts.append("OFFICIAL_ORG_SOURCES\n" + "\n---\n".join(org_lines))
+        if mem_lines:
+            parts.append("MEMBER_AFFILIATED_SOURCES\n" + "\n---\n".join(mem_lines))
+        return "\n\n".join(parts) if parts else "(none)"
+
     cids = (
-        ContentItem.query.filter(ContentItem.source_id.in_(sids))
+        ContentItem.query.filter(ContentItem.source_id.in_(eligible))
         .order_by(desc(ContentItem.first_seen_at))
         .limit(cap_items)
         .all()
     )
-    blocks: list[str] = []
-    for ci in cids:
-        tit = (ci.title or "").strip()
-        sn = _plaintext_excerpt(ci.snippet or "", excerpt_chars).strip()
-        blocks.append(f"title={tit}\nexcerpt={sn}")
-    return "\n---\n".join(blocks) if blocks else "(none)"
+    mem_only = _content_item_excerpt_lines(cids, excerpt_chars)
+    if not mem_only:
+        return "(none)"
+    return "MEMBER_AFFILIATED_SOURCES\n" + "\n---\n".join(mem_only)
 
 
 def rebuild_organization_persona(
@@ -63,6 +183,9 @@ def rebuild_organization_persona(
     if org is None:
         outcome["detail"] = "missing organization"
         return outcome
+
+    if getattr(org, "is_hub", False):
+        return sync_hub_persona_from_file(org)
 
     members = Person.query.join(Person.organizations).filter(Organization.id == org.id).distinct().all()
     member_payload: list[dict[str, Any]] = []
@@ -206,6 +329,8 @@ def rebuild_building_persona(
         json.dumps(member_payload, ensure_ascii=False, sort_keys=True)
         + repr((pl.latitude, pl.longitude))
         + repr(tuple(org_ids_linked))
+        + "\n|\n"
+        + excerpts
     )
     from hashlib import sha256
 

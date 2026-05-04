@@ -53,28 +53,6 @@ class SourceForm(FlaskForm):
     submit = SubmitField("Save")
 
 
-def coerce_hub_organization_choice(value):
-    if value is None or value == "":
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-class LeadPipelineHubForm(FlaskForm):
-    """Default Hub corpus organization for lead reports."""
-
-    hub_organization_id = SelectField(
-        "Hub corpus organization",
-        choices=[],
-        coerce=coerce_hub_organization_choice,
-        validators=[Optional()],
-        validate_choice=False,
-        description="Organization whose ingest supplies Hub snippets in lead reports.",
-    )
-    submit = SubmitField("Save Hub settings")
-
 
 class PersonForm(FlaskForm):
     display_name = StringField("Display name", validators=[DataRequired(), Length(max=512)])
@@ -85,6 +63,7 @@ class PersonForm(FlaskForm):
 class OrganizationForm(FlaskForm):
     display_name = StringField("Display name", validators=[DataRequired(), Length(max=512)])
     notes = TextAreaField("Notes", validators=[Optional()])
+    is_hub = BooleanField("Hub organization (sync persona from hub_persona.json)")
     submit = SubmitField("Save")
 
 

@@ -1898,7 +1898,7 @@ body.admin {
   flex: 0 0 auto;
 }
 
-.tbl-actions-inner a {
+.tbl-actions-inner a:not(.primary-btn-inline) {
   flex: 0 0 auto;
   white-space: nowrap;
   color: var(--accent-fill-hover);
@@ -1907,9 +1907,14 @@ body.admin {
   text-decoration: none;
 }
 
-.tbl-actions-inner a:hover {
+.tbl-actions-inner a:not(.primary-btn-inline):hover {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.tbl-actions-inner a.primary-btn-inline {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 /* Sources list: one tbody per site — section band + nested rows */

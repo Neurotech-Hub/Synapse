@@ -7,7 +7,6 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.leads.pipeline_settings import get_singleton
 from app.leads.stuck_reports import reconcile_interrupted_lead_reports
 from app.models import LeadReport, Organization, Person
 
@@ -60,14 +59,11 @@ def test_lead_report_new_get_redirects_to_leads_modal(client):
 
 def test_lead_report_enqueue_without_background_runner(app, client):
     with app.app_context():
-        o = Organization(slug="huborg", display_name="Hub Org", notes=None)
+        o = Organization(slug="huborg", display_name="Hub Org", notes=None, is_hub=True)
         p = Person(slug="subj_one", display_name="Subject Person", notes=None)
         db.session.add_all([o, p])
         db.session.commit()
         oid, pid = o.id, p.id
-        row = get_singleton()
-        row.hub_organization_id = oid
-        db.session.commit()
 
     _login(client)
     with patch("app.web.admin.routes.start_background_lead_report", return_value=(True, "")):

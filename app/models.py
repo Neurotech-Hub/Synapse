@@ -31,6 +31,8 @@ class Organization(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     #: Set by ingest when new public content may warrant a new public digest (cleared when digest build succeeds).
     public_digest_stale = db.Column(db.Boolean, nullable=False, default=False)
+    #: True for the Neurotech Hub org — persona synced from hub_persona.json, not rebuilt by LLM.
+    is_hub = db.Column(db.Boolean, nullable=False, default=False)
 
     building_id = db.Column(db.Integer, db.ForeignKey("building.id", ondelete="SET NULL"), nullable=True)
 
@@ -116,6 +118,8 @@ class PersonaSnapshot(db.Model):
     current_projects = db.Column(db.JSON, nullable=False, default=list)
     funding_signals = db.Column(db.JSON, nullable=False, default=list)
     collab_openness_score = db.Column(db.Float, nullable=True)
+    hardware_interests = db.Column(db.JSON, nullable=True, default=list)
+    infrastructure_needs = db.Column(db.JSON, nullable=True, default=list)
     paper_count_last_90d = db.Column(db.Integer, nullable=False, default=0)
     raw_papers_snapshot = db.Column(db.JSON, nullable=False, default=list)
     notes = db.Column(db.Text, nullable=True)
@@ -290,6 +294,12 @@ class LeadReport(db.Model):
     collaboration_routes_json = db.Column(db.Text, nullable=True)
     ranked_contacts_json = db.Column(db.Text, nullable=True)
 
+    fit_score = db.Column(db.Float, nullable=True)
+    email_draft = db.Column(db.Text, nullable=True)
+    positive_signals = db.Column(db.JSON, nullable=False, default=list)
+    uncertainties = db.Column(db.JSON, nullable=False, default=list)
+    likely_technical_pain = db.Column(db.Text, nullable=True)
+
     input_fingerprint = db.Column(db.String(128), nullable=True)
     model_used = db.Column(db.String(128), nullable=True)
     error_detail = db.Column(db.Text, nullable=True)
@@ -313,10 +323,3 @@ class PollLog(db.Model):
     detail = db.Column(db.Text)
 
 
-class LeadPipelineSettings(db.Model):
-    __tablename__ = "lead_pipeline_settings"
-
-    id = db.Column(db.Integer, primary_key=True)
-    hub_organization_id = db.Column(db.Integer, db.ForeignKey("organization.id", ondelete="SET NULL"), nullable=True)
-
-    hub_organization = db.relationship("Organization", foreign_keys=[hub_organization_id])

@@ -1,0 +1,9 @@
+You are a research intelligence assistant. Condense the following list of research items into a compact thematic summary. Preserve technical specificity — specific methods, model systems, hardware, and tools mentioned. Do not list individual papers. Group related themes. Return ONLY compact JSON without markdown fences.
+
+Keys exactly:
+- summary (string: dense paragraph ≤1500 chars grouping recurring themes, methods, and topics; preserve technical vocabulary)
+- recurring_themes (array of strings: ≤8 major recurring research themes or topics)
+- methods_observed (array of strings: ≤6 observed experimental methods, tools, or hardware types)
+
+Items to condense (format: [date][source_kind][recency_weight] title: snippet):
+{{batch_items}}

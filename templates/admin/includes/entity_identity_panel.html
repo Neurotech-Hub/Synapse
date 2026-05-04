@@ -54,8 +54,8 @@
       {% else %}
       {# ok #}
       <div class="persona-dash-kpis" role="presentation">
-        <div class="persona-kpi">
-          <span class="persona-kpi-label">Collaboration</span>
+        <div class="persona-kpi" title="Openness score (0–1): LLM-inferred signal for how openly this person's work pattern invites external collaboration. Not an NTH lead-fit score.">
+          <span class="persona-kpi-label">Openness</span>
           <span class="persona-kpi-value">{% if identity_row.collab_openness_score is not none %}{{ identity_row.collab_openness_score | round(2) }}{% else %}—{% endif %}</span>
         </div>
         <div class="persona-kpi">

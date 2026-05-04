@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy import desc, func
 from sqlalchemy.orm import joinedload
 
-from app.domain.effective_sources import source_ids_for_organization
+from app.domain.effective_sources import identity_eligible_source_ids_for_organization
 from app.extensions import db
 from app.identity.evidence import enabled_owned_source_ids
 from app.ingest.urlnorm import UrlValidationError, canonical_url, stable_catalog_url
@@ -46,20 +46,7 @@ def _sort_dt(item: ContentItem) -> datetime:
 def public_enabled_source_ids_for_organization(organization_id: int) -> list[int]:
     """Source IDs for an org (direct + linked members), restricted to enabled and not pending."""
 
-    raw = source_ids_for_organization(int(organization_id))
-    if not raw:
-        return []
-    rows = (
-        Source.query.filter(
-            Source.id.in_(raw),
-            Source.pending.is_(False),
-            Source.enabled.is_(True),
-        )
-        .with_entities(Source.id)
-        .order_by(Source.id.asc())
-        .all()
-    )
-    return [int(r[0]) for r in rows]
+    return identity_eligible_source_ids_for_organization(int(organization_id))
 
 
 def person_is_publicly_listable(person_id: int) -> bool:

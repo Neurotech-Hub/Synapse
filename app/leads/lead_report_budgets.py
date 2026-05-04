@@ -41,5 +41,10 @@ def org_place_persona_summaries_cap() -> int:
     return _env_int("SYNAPSE_LEAD_REPORT_ORG_PEOPLE_MAX", 40, 4, 200)
 
 
+def person_short_evidence_items() -> int:
+    """Max evidence items for persona-first person lead reports (recent citable window)."""
+    return _env_int("SYNAPSE_LEAD_REPORT_PERSON_SHORT_ITEMS", 15, 5, 50)
+
+
 # Pipeline semver for input_fingerprint bumps when prompt/evidence semantics change materially.
 PIPELINE_SEMVER = os.environ.get("SYNAPSE_LEAD_REPORT_PIPELINE_SEMVER", "1").strip() or "1"

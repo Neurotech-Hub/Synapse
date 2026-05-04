@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.identity.evidence import (
+    batch_summary_for_prompt,
     chunks_for_prompt,
     content_fingerprint,
     gather_content_items_for_person,
@@ -54,6 +55,8 @@ def apply_parsed_persona_payload(row: PersonaSnapshot, parsed: dict[str, Any]) -
     row.current_projects = _as_str_list(parsed.get("current_projects"))
     row.funding_signals = _as_str_list(parsed.get("funding_signals"))
     row.collab_openness_score = _as_float(parsed.get("collab_openness_score"))
+    row.hardware_interests = _as_str_list(parsed.get("hardware_interests"))
+    row.infrastructure_needs = _as_str_list(parsed.get("infrastructure_needs"))
     row.notes = (str(parsed.get("notes") or "").strip()[:8000] or None)
 
 
@@ -87,7 +90,7 @@ def rebuild_person_identity(
         outcome["detail"] = "not a person row"
         return outcome
 
-    items = gather_content_items_for_person(ent, limit=int(os.environ.get("SYNAPSE_IDENTITY_MAX_ITEMS", "42")))
+    items = gather_content_items_for_person(ent, limit=int(os.environ.get("SYNAPSE_IDENTITY_MAX_ITEMS", "80")))
     fp = content_fingerprint(items)
     overlay_papers = paper_count_for_owned_sources(ent, days=identity_paper_overlay_days())
     overlay_snapshot = raw_papers_snapshot(items, cap=int(os.environ.get("SYNAPSE_IDENTITY_SNAPSHOT_CAP", "40")))
@@ -132,7 +135,24 @@ def rebuild_person_identity(
         f"{org_blob}"
         f"manual_notes={(ent.notes or '').strip()[:2000]}"
     )
-    prompt = build_person_identity_prompt(person_blob=person_blob, content_chunks=chunks_for_prompt(items))
+
+    try:
+        batch_threshold = max(1, int(os.environ.get("SYNAPSE_IDENTITY_FULL_BATCH_THRESHOLD", "30")))
+    except ValueError:
+        batch_threshold = 30
+
+    if len(items) > batch_threshold:
+        detail_items = items[:batch_threshold]
+        tail_items = items[batch_threshold:]
+        detail_chunks = chunks_for_prompt(detail_items)
+        tail_summary = batch_summary_for_prompt(tail_items)
+        content_chunks = detail_chunks
+        if tail_summary:
+            content_chunks += "\n\n---\n\nBATCH_SUMMARY_OF_OLDER_ITEMS:\n" + tail_summary
+    else:
+        content_chunks = chunks_for_prompt(items)
+
+    prompt = build_person_identity_prompt(person_blob=person_blob, content_chunks=content_chunks)
     parsed, raw_model_text = run_identity_llm(prompt)
     if not isinstance(parsed, dict):
         if user_initiated:

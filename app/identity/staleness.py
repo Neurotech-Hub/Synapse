@@ -103,11 +103,14 @@ def mark_identity_stale_after_source_deleted(src: Source) -> None:
 
 
 def identity_snapshot_poll_ready(snapshot: PersonaSnapshot) -> bool:
-    """Enough ingest data that an LLM persona run is likely worthwhile."""
+    """Enough ingest data that a persona run is worthwhile (hub org always ready, syncs from file)."""
 
     if snapshot.person_id:
         return person_has_identity_evidence_signals(snapshot.person_id)
     if snapshot.organization_id:
+        org = db.session.get(Organization, int(snapshot.organization_id))
+        if org is not None and getattr(org, "is_hub", False):
+            return True
         return organization_has_identity_evidence_signals(snapshot.organization_id)
     if snapshot.building_id:
         return building_has_identity_evidence_signals(snapshot.building_id)

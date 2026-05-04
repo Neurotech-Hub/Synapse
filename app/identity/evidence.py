@@ -12,7 +12,7 @@ from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.ingest.html_extract import plaintext_excerpt as _plaintext_excerpt
-from app.domain.effective_sources import source_ids_for_organization
+from app.domain.effective_sources import identity_eligible_source_ids_for_organization
 from app.domain.entity_associations import organization_ids_for_building
 from app.models import ContentItem, Person, Source, SourceSnapshot
 
@@ -151,8 +151,37 @@ def sources_last_scanned_for_person(person: Person) -> dict[str, str | None]:
     }
 
 
+def _recency_weights(items: list[ContentItem]) -> dict[int, float]:
+    """Compute recency weights (0–1) for rss_feed items; html_page items always 1.00."""
+    rss_dates: list[tuple[int, datetime]] = []
+    for ci in items:
+        skind = ci.source.kind if ci.source else ""
+        if skind == "rss_feed":
+            rss_dates.append((ci.id, _coerce_dt(ci)))
+
+    weights: dict[int, float] = {}
+    if not rss_dates:
+        return weights
+
+    dates_only = [dt for _, dt in rss_dates]
+    newest = max(dates_only)
+    oldest = min(dates_only)
+    span_days = (newest - oldest).days
+
+    _min_dt = datetime.min.replace(tzinfo=timezone.utc)
+    for cid, dt in rss_dates:
+        if dt == _min_dt:
+            weights[cid] = 0.50
+        elif span_days == 0:
+            weights[cid] = 1.00
+        else:
+            w = 1.0 - (newest - dt).days / span_days
+            weights[cid] = round(max(0.0, min(1.0, w)), 2)
+    return weights
+
+
 def chunks_for_prompt(items: list[ContentItem]) -> str:
-    """Pack evidence newest-first."""
+    """Pack evidence newest-first with recency_weight headers for RSS items."""
 
     budget = max(16000, int(os.environ.get("SYNAPSE_IDENTITY_CONTENT_BUDGET_CHARS", "56000")))
     chunk_max = max(
@@ -166,6 +195,8 @@ def chunks_for_prompt(items: list[ContentItem]) -> str:
         full_text_n = 14
     full_text_n = max(4, min(120, full_text_n))
 
+    rw = _recency_weights(items)
+
     blocks: list[str] = []
     remaining = budget
     for idx, ci in enumerate(items):
@@ -174,8 +205,9 @@ def chunks_for_prompt(items: list[ContentItem]) -> str:
         when = ci.published_at or ci.first_seen_at
         when_s = when.isoformat() if when else ""
         skind = ci.source.kind if ci.source else ""
+        rw_str = f"{rw[ci.id]:.2f}" if ci.id in rw else "1.00"
         head = (
-            f"SYNAPSE_CONTENT_ITEM_ID={ci.id}\nSOURCE_KIND={skind}\n"
+            f"SYNAPSE_CONTENT_ITEM_ID={ci.id}\nSOURCE_KIND={skind}\nrecency_weight={rw_str}\n"
             f"title={title_line}\nlink={lk}\npublished={when_s}\ntext:\n"
         )
         overhead = len(head)
@@ -196,6 +228,49 @@ def chunks_for_prompt(items: list[ContentItem]) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
+def batch_summary_for_prompt(items: list[ContentItem], *, max_chars: int = 1500) -> str:
+    """Condense a tail batch of ContentItems via LLM; falls back to compact listing on error."""
+    from pathlib import Path
+
+    from app.ingest.ollama_client import run_identity_llm
+
+    if not items:
+        return ""
+
+    rw = _recency_weights(items)
+    _min_dt = datetime.min.replace(tzinfo=timezone.utc)
+    compact_lines: list[str] = []
+    for ci in items[:50]:
+        dt = _coerce_dt(ci)
+        when_s = dt.strftime("%Y-%m") if dt != _min_dt else "?"
+        skind = ci.source.kind if ci.source else ""
+        rw_str = f"w={rw[ci.id]:.2f}" if ci.id in rw else "w=1.00"
+        title = (ci.title or "").strip()
+        snippet_short = _plaintext_excerpt(ci.snippet or "", 120).strip()
+        compact_lines.append(f"- [{when_s}][{skind}][{rw_str}] {title}: {snippet_short}")
+
+    batch_text = "\n".join(compact_lines)
+    prompt_file = Path(__file__).resolve().parent.parent.parent / "prompts" / "content_batch_summary.txt"
+
+    try:
+        template = prompt_file.read_text(encoding="utf-8")
+        prompt = template.replace("{{batch_items}}", batch_text)
+        parsed, raw_text = run_identity_llm(prompt)
+        if isinstance(parsed, dict):
+            summary = str(parsed.get("summary") or "").strip()
+            if summary:
+                return summary[:max_chars]
+            themes = parsed.get("recurring_themes", [])
+            if isinstance(themes, list) and themes:
+                return "; ".join(str(t) for t in themes[:8])[:max_chars]
+        if raw_text:
+            return raw_text[:max_chars]
+    except Exception:
+        pass
+
+    return batch_text[:max_chars]
+
+
 def person_has_identity_evidence_signals(person_id: int) -> bool:
     """True if persona rebuild is likely useful (poll produced at least one content item somewhere)."""
 
@@ -210,11 +285,11 @@ def person_has_identity_evidence_signals(person_id: int) -> bool:
 def organization_has_identity_evidence_signals(organization_id: int) -> bool:
     """True if rollup has any ingested signals along effective org corpus sources."""
 
-    sids = source_ids_for_organization(int(organization_id))
+    sids = identity_eligible_source_ids_for_organization(int(organization_id))
     if not sids:
         return False
     return (
-        ContentItem.query.filter(ContentItem.source_id.in_(list(sids)))
+        ContentItem.query.filter(ContentItem.source_id.in_(sids))
         .with_entities(ContentItem.id)
         .first()
         is not None

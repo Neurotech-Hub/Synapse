@@ -10,6 +10,8 @@ REQUIRED_FIELDS = frozenset(
         "current_projects",
         "funding_signals",
         "collab_openness_score",
+        "hardware_interests",
+        "infrastructure_needs",
         "notes",
     }
 )

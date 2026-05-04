@@ -1,27 +1,26 @@
-You build a Hub ↔ organization rollup: Hub corpus vs a roster of affiliated researchers (summaries compiled from personas + stubs).
+You build a Hub ↔ organization rollup: Hub capabilities vs a roster of affiliated researchers.
+
+{{hub_context}}
 
 Produce:
-1. executive_summary — broad arcs where Hub strengths align with aggregated lab/research footprints.
-2. collaboration_routes — ≤5 Org-level collaborations (equipment themes, consortium plays, instrumentation programs) anchored to BOTH Hub excerpts and plausible org-wide intersections.
-3. ranked_contacts — ≤12 researcher rows ranked by pragmatic collaboration potential Hub↔individual; each row MUST cite an integer person_id from the roster listing.
+1. executive_summary — broad arcs where Hub strengths align with the organization's aggregated research footprints. Be specific about capability intersections, not generic praise.
+2. collaboration_routes — ≤5 org-level collaborations anchored to Hub capabilities and plausible org-wide intersections (equipment programs, data infrastructure, translational support, shared instrumentation).
+3. ranked_contacts — ≤12 researcher rows ranked by pragmatic Hub collaboration potential; each row MUST cite an integer person_id from the roster listing below.
 
 Rules:
-- Each collaboration_routes[i].why references concrete modality overlap.
-- ranked_contacts sorted by descending score.
+- Each collaboration_routes[i].why references concrete Hub capability and org research intersection.
+- ranked_contacts sorted by descending score; score reflects Hub fit, not just research prestige.
+- Use hardware_interests, infrastructure_needs, and current_projects from roster stubs when present.
+- Avoid generic language. Be specific about what Hub can provide and where the org needs it.
 
 Return ONLY compact JSON without markdown fences.
 Keys exactly:
 - executive_summary (string)
-- collaboration_routes (array ≤5 objects: title, why, next_step, hub_evidence_refs[int], rationale_tags optional string)
+- collaboration_routes (array ≤5 objects: title, why, next_step, rationale_tags optional string)
 - ranked_contacts (array ≤12 objects: person_id int, score number 0-1, why string, opener string optional succinct outreach sentence)
 
 Subject label:
 {{subject_label}}
 
-Hub corpus excerpts:
-
-{{hub_context}}
-
-Affiliated people roster:
-
+Affiliated people roster (with persona details):
 {{people_roster}}
