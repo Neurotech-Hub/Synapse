@@ -26,7 +26,6 @@ from app.ingest.urlnorm import stable_catalog_url
 from app.identity.staleness import mark_identity_stale_for_org_bundle, mark_identity_stale_from_xor_change
 from app.models import ContentItem, PollLog, Source, SourceSnapshot
 from app.public_feed.curate import clear_public_feed_curation
-from app.public_digest.staleness import apply_public_digest_stale_flags, collect_stale_targets_for_source
 
 _SSL = ssl.create_default_context()
 
@@ -98,6 +97,7 @@ def refresh_html_page_content_item(source: Source, *, commit: bool = True) -> di
         }
 
     h = hashlib.sha256(body).hexdigest()
+    source.last_poll_at = datetime.now(timezone.utc)
     ext_id = html_poll_content_external_id(body)
     ci_title, ci_snippet = _compute_html_page_title_snippet(source.url, body)
 
@@ -121,12 +121,6 @@ def refresh_html_page_content_item(source: Source, *, commit: bool = True) -> di
         db.session.flush()
         cid = row.id
         outcome = "created"
-
-    if outcome == "created":
-        _sp: set[int] = set()
-        _so: set[int] = set()
-        collect_stale_targets_for_source(source, person_ids=_sp, org_ids=_so)
-        apply_public_digest_stale_flags(person_ids=_sp, org_ids=_so)
 
     mark_identity_stale_from_xor_change(
         before_person_id=source.person_id,
@@ -274,7 +268,6 @@ def run_poll(*, on_source_step: PollStepCallback | None = None) -> PollLog:
     ok = True
     sources = Source.query.filter_by(enabled=True, pending=False).order_by(Source.id).all()
     total = len(sources)
-    stale_person_ids: set[int] = set()
     stale_org_ids: set[int] = set()
 
     try:
@@ -284,16 +277,18 @@ def run_poll(*, on_source_step: PollStepCallback | None = None) -> PollLog:
             try:
                 if s.kind == "rss_feed":
                     n = _ingest_rss_source(s)
+                    s.last_poll_at = datetime.now(timezone.utc)
                     line = f"[rss] {s.url}: {n} new item(s)"
                     lines.append(line)
-                    if n > 0:
-                        collect_stale_targets_for_source(s, person_ids=stale_person_ids, org_ids=stale_org_ids)
+                    if n > 0 and s.organization_id:
+                        stale_org_ids.add(int(s.organization_id))
                 elif s.kind == "html_page":
                     snaps, contents = _ingest_html_source(s)
+                    s.last_poll_at = datetime.now(timezone.utc)
                     line = f"[html] {s.url}: snapshot +{snaps}; content items +{contents}"
                     lines.append(line)
-                    if contents > 0:
-                        collect_stale_targets_for_source(s, person_ids=stale_person_ids, org_ids=stale_org_ids)
+                    if contents > 0 and s.organization_id:
+                        stale_org_ids.add(int(s.organization_id))
                 else:
                     line = f"[skip] unknown kind {s.kind!r} id={s.id}"
                     lines.append(line)
@@ -308,7 +303,6 @@ def run_poll(*, on_source_step: PollStepCallback | None = None) -> PollLog:
                     on_source_step(
                         phase="done", index=i, total=total, source=s, ok=False, message=err_line
                     )
-        apply_public_digest_stale_flags(person_ids=stale_person_ids, org_ids=stale_org_ids)
         for oid in sorted(stale_org_ids):
             mark_identity_stale_for_org_bundle(int(oid))
         db.session.commit()

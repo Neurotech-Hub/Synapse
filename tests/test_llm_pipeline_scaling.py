@@ -177,8 +177,8 @@ class TestHubPersonaSync:
             ps = PersonaSnapshot.query.filter_by(organization_id=org.id).first()
             assert ps is not None
             assert ps.build_status == "ok"
-            assert "electronics_and_pcb" in ps.research_focus
-            assert "embedded_systems" in ps.research_focus
+            assert "Custom electronics for neuroscience." in ps.research_focus
+            assert "Embedded devices where power, size, reliability matter." in ps.research_focus
             assert ps.current_projects == ["Hublink.cloud", "Wireless DBS implants"]
             assert ps.collab_openness_score == 1.0
             assert ps.model_used == "hub_persona.json"

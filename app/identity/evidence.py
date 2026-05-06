@@ -228,11 +228,81 @@ def chunks_for_prompt(items: list[ContentItem]) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
+def select_items_for_persona_rebuild(
+    items: list[ContentItem],
+    *,
+    mode: str,
+    snapshot_generated_at: datetime | None,
+) -> list[ContentItem]:
+    """Narrow content items by rebuild policy (full corpus vs incremental vs light)."""
+
+    m = (mode or "full").strip().lower()
+    if m == "full" or not items:
+        return items
+    if m == "light_refresh":
+        try:
+            cap = int(os.environ.get("SYNAPSE_IDENTITY_LIGHT_MAX_ITEMS", "12"))
+        except ValueError:
+            cap = 12
+        cap = max(4, min(cap, 80))
+        return items[:cap]
+
+    try:
+        days = int(os.environ.get("SYNAPSE_IDENTITY_INCREMENTAL_DAYS", "30"))
+    except ValueError:
+        days = 30
+    days = max(1, min(days, 365))
+    try:
+        lim = int(os.environ.get("SYNAPSE_IDENTITY_INCREMENTAL_MAX_ITEMS", "28"))
+    except ValueError:
+        lim = 28
+    lim = max(8, min(lim, 120))
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    gen = _normalize_utc(snapshot_generated_at) if snapshot_generated_at else None
+    window_start = cutoff
+    if gen is not None and gen > cutoff:
+        window_start = gen
+
+    picked: list[ContentItem] = []
+    for ci in items:
+        raw = ci.first_seen_at or ci.published_at
+        dt = _normalize_utc(raw)
+        if dt is not None and dt >= window_start:
+            picked.append(ci)
+    if len(picked) < 3:
+        picked = items[: min(40, len(items))]
+    return picked[:lim]
+
+
+def rss_novelty_score(
+    item: ContentItem,
+    *,
+    baseline_titles: set[str] | None = None,
+) -> float:
+    """Heuristic 0–1 novelty for RSS-derived items (for eval / future ranking)."""
+
+    if item.source and item.source.kind != "rss_feed":
+        return 1.0
+    title = (item.title or "").strip().lower()
+    if baseline_titles and title in baseline_titles:
+        return 0.2
+    dt = _normalize_utc(item.published_at or item.first_seen_at)
+    if dt is None:
+        return 0.5
+    age = (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0
+    if age <= 7:
+        return 1.0
+    if age <= 30:
+        return 0.75
+    return 0.45
+
+
 def batch_summary_for_prompt(items: list[ContentItem], *, max_chars: int = 1500) -> str:
     """Condense a tail batch of ContentItems via LLM; falls back to compact listing on error."""
     from pathlib import Path
 
-    from app.ingest.ollama_client import run_identity_llm
+    from app.ingest.llm_client import run_identity_llm
 
     if not items:
         return ""

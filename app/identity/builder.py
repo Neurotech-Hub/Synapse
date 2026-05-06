@@ -1,4 +1,4 @@
-"""Rebuild ``PersonaSnapshot`` for persons, organizations, and buildings via local Ollama."""
+"""Rebuild ``PersonaSnapshot`` for persons, orgs, and buildings (OpenAI or Ollama via :mod:`app.ingest.llm_client`)."""
 
 from __future__ import annotations
 
@@ -18,13 +18,21 @@ from app.identity.evidence import (
     identity_paper_overlay_days,
     paper_count_for_owned_sources,
     raw_papers_snapshot,
+    select_items_for_persona_rebuild,
     sources_last_scanned_for_person,
 )
 from app.identity.prompt import build_person_identity_prompt
-from app.ingest.ollama_client import OLLAMA_MODEL, run_identity_llm
+from app.identity.rebuild_modes import (
+    default_manual_rebuild_mode,
+    poll_persona_rebuild_mode,
+)
+from app.ingest.llm_client import identity_llm_model_label, run_identity_llm
 from app.models import Person, PersonaSnapshot, Source
 
 IDENTITY_PROMPT_VERSION = (os.environ.get("SYNAPSE_IDENTITY_PROMPT_VERSION") or "1").strip() or "1"
+
+
+_NONE_PLACEHOLDERS = {"(none)", "none", "n/a", "(n/a)", "-", "—"}
 
 
 def _as_str_list(raw: Any) -> list[str]:
@@ -33,7 +41,7 @@ def _as_str_list(raw: Any) -> list[str]:
     out: list[str] = []
     for x in raw:
         s = str(x).strip()
-        if s:
+        if s and s.lower() not in _NONE_PLACEHOLDERS:
             out.append(s[:1200])
     return out[:64]
 
@@ -57,7 +65,28 @@ def apply_parsed_persona_payload(row: PersonaSnapshot, parsed: dict[str, Any]) -
     row.collab_openness_score = _as_float(parsed.get("collab_openness_score"))
     row.hardware_interests = _as_str_list(parsed.get("hardware_interests"))
     row.infrastructure_needs = _as_str_list(parsed.get("infrastructure_needs"))
-    row.notes = (str(parsed.get("notes") or "").strip()[:8000] or None)
+    _raw_notes = str(parsed.get("notes") or "").strip()[:8000]
+    row.notes = None if _raw_notes.lower() in _NONE_PLACEHOLDERS else (_raw_notes or None)
+
+
+def _persona_snapshot_json_for_prompt(row: PersonaSnapshot | None) -> str | None:
+    if row is None:
+        return None
+    import json
+
+    d = {
+        "research_focus": row.research_focus or [],
+        "methods": row.methods or [],
+        "keywords": row.keywords or [],
+        "current_projects": row.current_projects or [],
+        "funding_signals": row.funding_signals or [],
+        "collab_openness_score": row.collab_openness_score,
+        "hardware_interests": row.hardware_interests or [],
+        "infrastructure_needs": row.infrastructure_needs or [],
+        "notes": row.notes or "",
+    }
+    raw = json.dumps(d, ensure_ascii=False, indent=2)
+    return raw[:14_000]
 
 
 def person_ids_for_owned_sources(source_ids: list[int]) -> list[int]:
@@ -77,6 +106,7 @@ def rebuild_person_identity(
     *,
     skip_if_same_fingerprint: bool = False,
     user_initiated: bool = False,
+    rebuild_mode: str | None = None,
 ) -> dict[str, Any]:
     """Run identity job for ``person_id``. Returns outcome dict."""
 
@@ -90,10 +120,31 @@ def rebuild_person_identity(
         outcome["detail"] = "not a person row"
         return outcome
 
-    items = gather_content_items_for_person(ent, limit=int(os.environ.get("SYNAPSE_IDENTITY_MAX_ITEMS", "80")))
-    fp = content_fingerprint(items)
+    poll_cap = int(os.environ.get("SYNAPSE_IDENTITY_MAX_ITEMS", "80"))
+    full_items = gather_content_items_for_person(ent, limit=max(1, poll_cap))
+    fp = content_fingerprint(full_items)
+
+    mode_raw = rebuild_mode
+    if mode_raw is None:
+        mode_raw = default_manual_rebuild_mode() if user_initiated else poll_persona_rebuild_mode()
+    eff_mode = (mode_raw or "full").strip().lower()
+    if eff_mode not in ("full", "incremental", "light_refresh"):
+        eff_mode = "full"
+    row_peek = ent.persona
+    if eff_mode in ("incremental", "light_refresh") and (
+        row_peek is None or row_peek.build_status != "ok" or not row_peek.generated_at
+    ):
+        eff_mode = "full"
+
+    items = select_items_for_persona_rebuild(
+        full_items,
+        mode=eff_mode,
+        snapshot_generated_at=row_peek.generated_at if row_peek is not None else None,
+    )
     overlay_papers = paper_count_for_owned_sources(ent, days=identity_paper_overlay_days())
-    overlay_snapshot = raw_papers_snapshot(items, cap=int(os.environ.get("SYNAPSE_IDENTITY_SNAPSHOT_CAP", "40")))
+    overlay_snapshot = raw_papers_snapshot(
+        full_items, cap=int(os.environ.get("SYNAPSE_IDENTITY_SNAPSHOT_CAP", "40"))
+    )
     overlay_scanned = sources_last_scanned_for_person(ent)
     gen_at = datetime.now(timezone.utc)
 
@@ -152,7 +203,13 @@ def rebuild_person_identity(
     else:
         content_chunks = chunks_for_prompt(items)
 
-    prompt = build_person_identity_prompt(person_blob=person_blob, content_chunks=content_chunks)
+    prev_json = _persona_snapshot_json_for_prompt(row_peek) if eff_mode in ("incremental", "light_refresh") else None
+    prompt = build_person_identity_prompt(
+        person_blob=person_blob,
+        content_chunks=content_chunks,
+        rebuild_mode=eff_mode,
+        previous_persona_json=prev_json,
+    )
     parsed, raw_model_text = run_identity_llm(prompt)
     if not isinstance(parsed, dict):
         if user_initiated:
@@ -168,7 +225,7 @@ def rebuild_person_identity(
             row.raw_papers_snapshot = overlay_snapshot
             row.sources_last_scanned = overlay_scanned
             row.updated_at = gen_at
-            row.model_used = OLLAMA_MODEL
+            row.model_used = identity_llm_model_label()
             db.session.commit()
             outcome["status"] = "failed"
             outcome["detail"] = row.build_error or ""
@@ -204,21 +261,29 @@ def rebuild_person_identity(
     row.build_status = "ok"
     row.build_error = None
     row.generated_at = gen_at
-    row.model_used = OLLAMA_MODEL
+    row.model_used = identity_llm_model_label()
     row.updated_at = gen_at
     db.session.commit()
     outcome["status"] = "ok"
     return outcome
 
 
-def rebuild_person_identities_bounded(source_ids: list[int], *, max_entities: int = 6) -> list[dict[str, Any]]:
+def rebuild_person_identities_bounded(
+    source_ids: list[int], *, max_entities: int = 6, rebuild_mode: str | None = None
+) -> list[dict[str, Any]]:
     """After poll/save touched sources — refresh personas for owners (budgeted burst)."""
 
     pids = person_ids_for_owned_sources(source_ids)
     out: list[dict[str, Any]] = []
     for pid in sorted(pids)[: max(0, int(max_entities))]:
         try:
-            out.append(rebuild_person_identity(pid, skip_if_same_fingerprint=True))
+            out.append(
+                rebuild_person_identity(
+                    pid,
+                    skip_if_same_fingerprint=True,
+                    rebuild_mode=rebuild_mode or poll_persona_rebuild_mode(),
+                )
+            )
         except Exception:
             out.append({"person_id": pid, "status": "skipped", "detail": traceback.format_exc()[-800:]})
     return out

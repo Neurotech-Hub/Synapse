@@ -15,9 +15,6 @@
         <form method="post" action="{{ url_for('admin.poll_now') }}" class="toolbar dash-card-head-toolbar" id="poll-now-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
           <button type="submit" class="primary-btn" id="poll-now-submit"{% if poll_busy %} disabled aria-disabled="true"{% endif %}>Poll now</button>
-          {% if poll_busy %}
-          <span class="toolbar-status muted">Running…</span>
-          {% endif %}
         </form>
       </div>
     </div>
@@ -43,6 +40,13 @@
       <p id="poll-run-finished" class="poll-run-finished" hidden></p>
       <button type="button" class="disapprove-btn poll-run-dismiss" id="poll-run-dismiss" hidden>Done</button>
     </div>
+    <p class="dash-card-footer-status muted" id="polling-card-footer-status" role="status" aria-live="polite">
+      {% if poll_busy %}
+      Poll running — wait to batch refresh.
+      {% else %}
+      Poll now to refresh ingest state across approved sources.
+      {% endif %}
+    </p>
   </section>
   <section class="dash-card" aria-labelledby="dash-identities-h2">
     <div class="dash-card-head">
@@ -51,9 +55,6 @@
         <form method="post" action="{{ url_for('admin.identities_refresh_stale_ready') }}" class="toolbar dash-card-head-toolbar dash-persona-rebuild-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
           <button type="submit" class="primary-btn dash-identity-rebuild-btn" {% if poll_busy %}disabled aria-disabled="true" title="Wait for poll to finish"{% elif persona_stale_count == 0 %}disabled aria-disabled="true" title="No stale identity snapshots."{% endif %}>Rebuild all</button>
-          {% if poll_busy %}
-          <span class="toolbar-status muted">Poll running — wait to batch refresh</span>
-          {% endif %}
         </form>
       </div>
     </div>
@@ -100,6 +101,15 @@
     {% elif persona_stale_count %}
     <p class="muted contextual-note dash-card-note dash-card-note--spaced">Stale snapshots exist but are outside this short list — open people, organizations, or places to rebuild.</p>
     {% endif %}
+    <p class="dash-card-footer-status muted" id="identities-card-footer-status" role="status" aria-live="polite">
+      {% if poll_busy %}
+      Poll running — wait to batch refresh.
+      {% elif persona_stale_count == 0 %}
+      No stale snapshots are ready for batch refresh.
+      {% else %}
+      Batch refresh targets poll-ready stale snapshots.
+      {% endif %}
+    </p>
   </section>
 </div>
 
@@ -147,11 +157,15 @@
   var finished = document.getElementById("poll-run-finished");
   var dismissBtn = document.getElementById("poll-run-dismiss");
   var submitBtn = document.getElementById("poll-now-submit");
+  var pollingFooter = document.getElementById("polling-card-footer-status");
+  var identitiesFooter = document.getElementById("identities-card-footer-status");
   var currentEl = document.getElementById("poll-run-current");
   if (!panel || !summary || !track || !fill) return;
 
   panel.hidden = false;
   if (submitBtn) submitBtn.disabled = true;
+  if (pollingFooter) pollingFooter.textContent = "Poll running — wait to batch refresh.";
+  if (identitiesFooter) identitiesFooter.textContent = "Poll running — wait to batch refresh.";
 
   function abbrevPollUrl(raw, maxLen) {
     maxLen = maxLen || 96;
@@ -277,6 +291,10 @@
           timer = null;
           dismissBtn.hidden = false;
           if (submitBtn) submitBtn.disabled = false;
+          if (pollingFooter)
+            pollingFooter.textContent = "Poll complete — ingest state refreshed.";
+          if (identitiesFooter)
+            identitiesFooter.textContent = "Batch refresh is now available.";
         }
       })
       .catch(function () {
@@ -294,6 +312,8 @@
         finished.hidden = false;
         dismissBtn.hidden = false;
         if (submitBtn) submitBtn.disabled = false;
+        if (pollingFooter)
+          pollingFooter.textContent = "Poll status unavailable — try refreshing.";
       });
   }
 

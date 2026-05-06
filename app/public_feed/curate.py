@@ -11,7 +11,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.ingest.ollama_client import OLLAMA_MODEL, run_public_feed_curate_llm
+from app.ingest.llm_client import public_feed_curate_model_label, run_public_feed_curate_llm
 from app.leads.prompt_loader import prompts_dir
 from app.models import ContentItem, Source
 from app.public_feed.constants import PIPELINE_SEMVER
@@ -200,7 +200,7 @@ def run_public_feed_curation_batch(*, limit: int = 48, commit: bool = True) -> d
         verdict = rec["verdict"]
         ci.public_feed_verdict = verdict
         ci.public_feed_curated_at = now
-        ci.public_feed_model_used = OLLAMA_MODEL
+        ci.public_feed_model_used = public_feed_curate_model_label()
         ci.public_feed_input_fingerprint = public_feed_input_fingerprint(ci)
         if verdict == "hide":
             ci.public_feed_display_title = None

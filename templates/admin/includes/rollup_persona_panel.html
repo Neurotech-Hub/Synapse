@@ -4,7 +4,13 @@
     <header class="persona-dash-header">
       <div class="persona-dash-header-row">
         <h2 id="rollup-persona-heading" class="persona-dash-heading">Rollup persona — <strong>{{ subject_title }}</strong></h2>
-        <form method="post" action="{{ refresh_endpoint }}" class="persona-dash-refresh" id="rollup-persona-refresh-form">
+        <form
+          method="post"
+          action="{{ refresh_endpoint }}"
+          class="persona-dash-refresh"
+          id="rollup-persona-refresh-form"
+          data-persona-busy-message="{% if organization is defined and organization and organization.is_hub %}Refreshing from hub_persona.json — leave this tab open.{% else %}{{ persona_rebuild_busy_message | e }}{% endif %}"
+        >
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
           <button type="submit" class="primary-btn-inline persona-dash-refresh-btn" data-rollups-refresh-submit>{% if organization and organization.is_hub %}Re-sync from file{% else %}Rebuild rollup{% endif %}</button>
         </form>
@@ -27,7 +33,7 @@
     {% endif %}
     <div class="persona-dash-body">
       {% if not identity_row %}
-      <p class="muted persona-dash-empty">No rollup yet — <strong>Rebuild rollup</strong> after member personas exist.</p>
+      <p class="muted persona-dash-empty">No rollup yet — <strong>Rebuild rollup</strong> after poll content exists from org/member sources (member personas are optional).</p>
       {% elif identity_row.build_status == 'stale' %}
       <div class="persona-dash-notice persona-dash-notice--warn" role="status">
         <p class="persona-dash-notice-msg"><strong>{{ identity_row.build_status }}</strong>{% if identity_row.build_error %}: {{ identity_row.build_error }}{% endif %}</p>
@@ -91,7 +97,8 @@
     btn.disabled = true;
     if (stat) {
       stat.hidden = false;
-      stat.textContent = "Running local model — leave this tab open.";
+      var busy = (form.getAttribute("data-persona-busy-message") || "").trim();
+      stat.textContent = busy || "Rebuilding — leave this tab open.";
     }
   });
   window.addEventListener("pageshow", function () {

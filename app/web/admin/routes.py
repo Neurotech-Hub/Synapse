@@ -26,6 +26,7 @@ from app.domain.entity_associations import (
 from app.domain.region_buildings import rebuild_region_building_for_building, rebuild_region_building_for_region
 from app.extensions import db
 from app.identity.builder import rebuild_person_identity
+from app.identity.rebuild_modes import dashboard_stale_rebuild_mode, default_manual_rebuild_mode
 from app.identity.evidence import identity_paper_overlay_days
 from app.identity.rollup import rebuild_building_persona, rebuild_organization_persona
 from app.identity.staleness import (
@@ -39,6 +40,7 @@ from app.identity.staleness import (
     mark_person_identity_stale,
     mark_building_identity_stale,
 )
+from app.ingest.llm_client import openai_identity_admin_status, persona_rebuild_busy_footer_message
 from app.ingest.ollama_client import ollama_admin_status
 from app.ingest.pipeline import refresh_html_page_content_items
 from app.ingest.poll_progress import is_poll_running, snapshot_poll, start_background_poll
@@ -60,16 +62,10 @@ from app.models import (
     Person,
     PersonaSnapshot,
     PollLog,
-    PublicActivityDigest,
     Region,
     Source,
     SourceSnapshot,
     person_organization as person_organization_tbl,
-)
-from app.public_digest.build import (
-    build_all_stale_public_digests,
-    build_public_digest_for_organization,
-    build_public_digest_for_person,
 )
 from app.public_feed.curate import (
     clear_public_feed_curation,
@@ -229,11 +225,15 @@ def inject_ollama_llm_sidebar():
     if not current_user.is_authenticated:
         return {
             "ollama_llm": None,
+            "openai_llm": None,
+            "persona_rebuild_busy_message": "",
             "lead_report_busy": False,
             "active_lead_report_id": None,
         }
     return {
         "ollama_llm": ollama_admin_status(),
+        "openai_llm": openai_identity_admin_status(),
+        "persona_rebuild_busy_message": persona_rebuild_busy_footer_message(),
         "lead_report_busy": is_lead_report_running(),
         "active_lead_report_id": active_report_id(),
     }
@@ -408,34 +408,68 @@ def identities_refresh_stale_ready():
     candidates = list_stale_persona_snapshots(limit=max(80, burst * 6))
     ready = [s for s in candidates if identity_snapshot_poll_ready(s)]
     rebuilt = 0
+    rebuilt_links: list[dict[str, str]] = []
     skipped_no_evidence = len(candidates) - len(ready)
     for snapshot in ready[:burst]:
         try:
             if snapshot.person_id is not None:
                 out = rebuild_person_identity(
-                    int(snapshot.person_id), skip_if_same_fingerprint=False, user_initiated=True
+                    int(snapshot.person_id),
+                    skip_if_same_fingerprint=False,
+                    user_initiated=True,
+                    rebuild_mode=dashboard_stale_rebuild_mode(),
                 )
             elif snapshot.organization_id is not None:
                 out = rebuild_organization_persona(
-                    int(snapshot.organization_id), skip_if_same_fingerprint=False, user_initiated=True
+                    int(snapshot.organization_id),
+                    skip_if_same_fingerprint=False,
+                    user_initiated=True,
+                    rebuild_mode=dashboard_stale_rebuild_mode(),
                 )
             elif snapshot.building_id is not None:
                 out = rebuild_building_persona(
-                    int(snapshot.building_id), skip_if_same_fingerprint=False, user_initiated=True
+                    int(snapshot.building_id),
+                    skip_if_same_fingerprint=False,
+                    user_initiated=True,
+                    rebuild_mode=dashboard_stale_rebuild_mode(),
                 )
             else:
                 continue
             if (out or {}).get("status") == "ok":
                 rebuilt += 1
+                if snapshot.person_id is not None and snapshot.person is not None:
+                    rebuilt_links.append(
+                        {
+                            "href": url_for("admin.people_edit", pid=int(snapshot.person_id)),
+                            "label": snapshot.person.display_name,
+                        }
+                    )
+                elif snapshot.organization_id is not None and snapshot.organization is not None:
+                    rebuilt_links.append(
+                        {
+                            "href": url_for("admin.organizations_edit", oid=int(snapshot.organization_id)),
+                            "label": snapshot.organization.display_name,
+                        }
+                    )
+                elif snapshot.building_id is not None and snapshot.building is not None:
+                    rebuilt_links.append(
+                        {
+                            "href": url_for("admin.buildings_view", bid=int(snapshot.building_id)),
+                            "label": snapshot.building.display_name,
+                        }
+                    )
         except Exception:
             continue
     if rebuilt:
-        flash(
+        text = (
             f"Rebuilt {rebuilt} stale identity snapshot(s) with ingest evidence. "
             f"Entries needing a poll first were skipped ({skipped_no_evidence} not ready in this roster). "
-            f"Budget: {burst} per run.",
-            "success",
+            f"Budget: {burst} per run."
         )
+        if rebuilt_links:
+            flash({"text": text, "links": rebuilt_links[:6]}, "success")
+        else:
+            flash(text, "success")
     else:
         flash(
             "No stale personas were rebuilt — either none are poll-ready yet (run Poll now first) "
@@ -934,12 +968,14 @@ def people_edit(pid: int):
 
     org_ids_linked = sorted({o.id for o in (ent.organizations or [])})
 
+    _hub_org = Organization.query.filter_by(is_hub=True).first()
     kw = dict(
         form=form,
         person=ent,
         identity_row=identity_row,
         identity_paper_days=identity_paper_overlay_days(),
-        hub_organization_id=_normalized_hub_organization_id(),
+        hub_organization_id=int(_hub_org.id) if _hub_org else None,
+        hub_organization_slug=_hub_org.slug if _hub_org else None,
         source_picker_bootstrap=_picker_kw(_linked_src_ids()),
         selected_source_ids=sorted(_linked_src_ids()),
         quick_source_form=SourceForm(prefix="quick_src"),
@@ -1002,10 +1038,27 @@ def people_edit(pid: int):
 def people_refresh_identity(pid: int):
     if db.session.get(Person, pid) is None:
         abort(404)
-    outcome = rebuild_person_identity(pid, skip_if_same_fingerprint=False, user_initiated=True)
+    outcome = rebuild_person_identity(
+        pid,
+        skip_if_same_fingerprint=False,
+        user_initiated=True,
+        rebuild_mode=default_manual_rebuild_mode(),
+    )
     st = outcome.get("status") or ""
     if st == "ok":
-        flash("Persona rebuilt from owned sources.", "success")
+        p = db.session.get(Person, pid)
+        flash(
+            {
+                "text": "Persona rebuilt from owned sources.",
+                "links": [
+                    {
+                        "href": url_for("admin.people_edit", pid=pid),
+                        "label": (p.display_name if p is not None else "Review identity"),
+                    }
+                ],
+            },
+            "success",
+        )
     elif st == "empty":
         flash(outcome.get("detail") or "No evidence for persona.", "info")
     elif st == "failed":
@@ -1222,9 +1275,29 @@ def organizations_edit(oid: int):
 def organizations_refresh_persona(oid: int):
     if db.session.get(Organization, oid) is None:
         abort(404)
-    outcome = rebuild_organization_persona(oid, skip_if_same_fingerprint=False, user_initiated=True)
-    lvl = "success" if outcome.get("status") == "ok" else "info"
-    flash(outcome.get("detail") or outcome.get("status") or "done", lvl)
+    outcome = rebuild_organization_persona(
+        oid,
+        skip_if_same_fingerprint=False,
+        user_initiated=True,
+        rebuild_mode=default_manual_rebuild_mode(),
+    )
+    st = outcome.get("status") or ""
+    if st == "ok":
+        o = db.session.get(Organization, oid)
+        flash(
+            {
+                "text": "Organization rollup rebuilt.",
+                "links": [
+                    {
+                        "href": url_for("admin.organizations_edit", oid=oid),
+                        "label": (o.display_name if o is not None else "Review identity"),
+                    }
+                ],
+            },
+            "success",
+        )
+    else:
+        flash(outcome.get("detail") or st or "done", "info")
     nxt = _safe_admin_redirect_target()
     if nxt:
         return redirect(nxt)
@@ -1427,9 +1500,29 @@ def buildings_view(bid: int):
 def buildings_refresh_persona(bid: int):
     if db.session.get(Building, bid) is None:
         abort(404)
-    outcome = rebuild_building_persona(bid, skip_if_same_fingerprint=False, user_initiated=True)
-    lvl = "success" if outcome.get("status") == "ok" else "info"
-    flash(outcome.get("detail") or outcome.get("status") or "done", lvl)
+    outcome = rebuild_building_persona(
+        bid,
+        skip_if_same_fingerprint=False,
+        user_initiated=True,
+        rebuild_mode=default_manual_rebuild_mode(),
+    )
+    st = outcome.get("status") or ""
+    if st == "ok":
+        b = db.session.get(Building, bid)
+        flash(
+            {
+                "text": "Place rollup rebuilt.",
+                "links": [
+                    {
+                        "href": url_for("admin.buildings_view", bid=bid),
+                        "label": (b.display_name if b is not None else "Review identity"),
+                    }
+                ],
+            },
+            "success",
+        )
+    else:
+        flash(outcome.get("detail") or st or "done", "info")
     nxt = _safe_admin_redirect_target()
     if nxt:
         return redirect(nxt)
@@ -1847,9 +1940,6 @@ def items_delete(iid: int):
     return redirect(url_for("admin.items_list", source_id=src_id))
 
 
-_DIGEST_TABLE = "public_activity_digest"
-
-
 def _public_feed_curation_schema_ready() -> bool:
     try:
         cols = {c["name"] for c in inspect(db.engine).get_columns("content_item")}
@@ -1858,88 +1948,9 @@ def _public_feed_curation_schema_ready() -> bool:
         return False
 
 
-def _public_digest_schema_ready() -> bool:
-    """True when Alembic revision ``c8d9e0f1a2b3`` (or equivalent) has been applied."""
-
-    try:
-        return bool(inspect(db.engine).has_table(_DIGEST_TABLE))
-    except Exception:
-        return False
-
-
-def _digest_schema_redirect():
-    flash(
-        "Database is missing digest tables. From the project root run: "
-        "flask --app run:app db upgrade",
-        "error",
-    )
-    return redirect(url_for("admin.dashboard"))
-
-
-@admin_bp.route("/digest")
+@admin_bp.route("/items/public-feed-curate-status")
 @login_required
-def digest_index():
-    if not _public_digest_schema_ready():
-        return _digest_schema_redirect()
-    last_person = dict(
-        db.session.query(PublicActivityDigest.person_id, func.max(PublicActivityDigest.completed_at))
-        .filter(PublicActivityDigest.person_id.isnot(None), PublicActivityDigest.status == "ok")
-        .group_by(PublicActivityDigest.person_id)
-        .all()
-    )
-    last_org = dict(
-        db.session.query(PublicActivityDigest.organization_id, func.max(PublicActivityDigest.completed_at))
-        .filter(PublicActivityDigest.organization_id.isnot(None), PublicActivityDigest.status == "ok")
-        .group_by(PublicActivityDigest.organization_id)
-        .all()
-    )
-    rows: list[dict[str, object]] = []
-    for p in Person.query.order_by(Person.display_name.asc()).all():
-        if not person_is_publicly_listable(p.id) and not p.public_digest_stale:
-            continue
-        rows.append(
-            {
-                "kind": "person",
-                "id": p.id,
-                "name": p.display_name,
-                "slug": p.slug,
-                "stale": bool(p.public_digest_stale),
-                "last_at": last_person.get(p.id),
-                "build_url": url_for("admin.digest_build_person", pid=p.id),
-            }
-        )
-    for o in Organization.query.order_by(Organization.display_name.asc()).all():
-        if not organization_is_publicly_listable(o.id) and not o.public_digest_stale:
-            continue
-        rows.append(
-            {
-                "kind": "organization",
-                "id": o.id,
-                "name": o.display_name,
-                "slug": o.slug,
-                "stale": bool(o.public_digest_stale),
-                "last_at": last_org.get(o.id),
-                "build_url": url_for("admin.digest_build_organization", oid=o.id),
-            }
-        )
-    rows.sort(key=lambda r: (not bool(r["stale"]), str(r.get("name") or "").lower()))
-    feed_ready = _public_feed_curation_schema_ready()
-    pending_feed = int(count_uncurated_public_feed_candidates()) if feed_ready else 0
-    feed_busy = is_public_feed_curation_running() if feed_ready else False
-    feed_active_rid = public_feed_curation_active_run_id() if feed_ready else None
-    return render_template(
-        "admin/digest_index.html",
-        rows=rows,
-        public_feed_curation_schema_ready=feed_ready,
-        public_feed_pending_count=pending_feed,
-        feed_curate_busy=feed_busy,
-        feed_curate_active_run_id=feed_active_rid,
-    )
-
-
-@admin_bp.route("/digest/public-feed-curate-status")
-@login_required
-def digest_public_feed_curate_status():
+def items_public_feed_curate_status():
     run_id = (request.args.get("run_id") or "").strip()
     data = snapshot_public_feed_curation(run_id)
     if data is None:
@@ -1949,67 +1960,21 @@ def digest_public_feed_curate_status():
     return jsonify({**data, "pending_count_live": pending})
 
 
-@admin_bp.route("/digest/curate-public-feed", methods=("POST",))
+@admin_bp.route("/items/curate-public-feed", methods=("POST",))
 @login_required
-def digest_curate_public_feed():
-    if not _public_digest_schema_ready():
-        return _digest_schema_redirect()
+def items_curate_public_feed():
     if not _public_feed_curation_schema_ready():
         flash(
             "Database is missing public feed curation columns. From the project root run: "
             "flask --app run:app db upgrade",
             "error",
         )
-        return redirect(url_for("admin.digest_index"))
+        return redirect(url_for("admin.items_list"))
     run_id, err = start_background_public_feed_curation(current_app._get_current_object())
     if err == "busy":
-        flash("Public feed curation is already running. Watch the progress panel or refresh this page.", "error")
-        return redirect(url_for("admin.digest_index"))
+        flash("Public feed curation is already running.", "error")
+        return redirect(url_for("admin.items_list"))
     if err == "thread_start_failed":
         flash("Could not start the curation task. Try again or restart the server.", "error")
-        return redirect(url_for("admin.digest_index"))
-    return redirect(url_for("admin.digest_index", feed_curate_run=run_id))
-
-
-@admin_bp.route("/digest/build-all", methods=("POST",))
-@login_required
-def digest_build_all():
-    if not _public_digest_schema_ready():
-        return _digest_schema_redirect()
-    out = build_all_stale_public_digests(commit=True)
-    flash(f"Digest batch finished ({out['processed']} run(s)).", "info")
-    return redirect(url_for("admin.digest_index"))
-
-
-@admin_bp.route("/digest/build-person/<int:pid>", methods=("POST",))
-@login_required
-def digest_build_person(pid: int):
-    if not _public_digest_schema_ready():
-        return _digest_schema_redirect()
-    r = build_public_digest_for_person(pid, commit=True)
-    if r["status"] == "error":
-        flash(r.get("detail") or "Build failed.", "error")
-    elif r["status"] == "skipped":
-        flash("Digest skipped (unchanged vs last published fingerprint).", "info")
-    elif r["status"] == "failed":
-        flash("Digest build failed (model JSON). Check latest digest row.", "error")
-    else:
-        flash("Person digest built.", "success")
-    return redirect(url_for("admin.digest_index"))
-
-
-@admin_bp.route("/digest/build-organization/<int:oid>", methods=("POST",))
-@login_required
-def digest_build_organization(oid: int):
-    if not _public_digest_schema_ready():
-        return _digest_schema_redirect()
-    r = build_public_digest_for_organization(oid, commit=True)
-    if r["status"] == "error":
-        flash(r.get("detail") or "Build failed.", "error")
-    elif r["status"] == "skipped":
-        flash("Digest skipped (unchanged vs last published fingerprint).", "info")
-    elif r["status"] == "failed":
-        flash("Digest build failed (model JSON). Check latest digest row.", "error")
-    else:
-        flash("Organization digest built.", "success")
-    return redirect(url_for("admin.digest_index"))
+        return redirect(url_for("admin.items_list"))
+    return redirect(url_for("admin.items_list", feed_curate_run=run_id))

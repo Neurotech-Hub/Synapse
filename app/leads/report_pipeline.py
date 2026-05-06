@@ -15,7 +15,7 @@ from app.domain.entity_associations import organization_ids_for_building
 from app.domain.region_buildings import building_ids_for_region, ensure_region_building_rows
 from app.identity.evidence import gather_content_items_for_person, chunks_for_prompt
 from app.ingest.html_extract import plaintext_excerpt as _plain_excerpt
-from app.ingest.ollama_client import OLLAMA_MODEL, run_lead_report_llm
+from app.ingest.llm_client import lead_report_model_label, run_lead_report_llm
 from app.leads.hub_corpus import hub_persona_context_block, load_hub_persona
 from app.leads.lead_report_budgets import (
     PIPELINE_SEMVER,
@@ -273,7 +273,7 @@ def _run_person_report(report: LeadReport, *, hub_org_id: int) -> None:
     report.executive_summary = exe.strip() or "(Synthesis omitted.)"
     report.collaboration_routes_json = json.dumps(routes, ensure_ascii=False)
     report.ranked_contacts_json = None
-    report.model_used = OLLAMA_MODEL
+    report.model_used = lead_report_model_label()
     report.fit_score = fit_score
     report.email_draft = email_draft_val
     report.positive_signals = positive_signals_val
@@ -350,7 +350,7 @@ def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> N
     report.executive_summary = exe.strip() or "(No summary produced.)"
     report.collaboration_routes_json = json.dumps(routes, ensure_ascii=False)
     report.ranked_contacts_json = json.dumps(ranked, ensure_ascii=False) if ranked else None
-    report.model_used = OLLAMA_MODEL
+    report.model_used = lead_report_model_label()
 
 
 def effective_hub_organization_id(report: LeadReport) -> int | None:

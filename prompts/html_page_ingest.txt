@@ -1,0 +1,11 @@
+Summarize the web page text below into a concise, dense paragraph for a research intelligence database.
+
+Rules:
+- Use ONLY the words and information in the provided text. Do not add, infer, or invent anything.
+- Preserve specific technical details: names, tools, devices, methods, grants, numbers, URLs.
+- Omit navigation menus, repeated headings, footers, and boilerplate.
+- Return JSON with one key: snippet (string).
+
+Page URL: {{page_url}}
+Page text:
+{{plaintext_excerpt}}

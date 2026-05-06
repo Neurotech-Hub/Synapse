@@ -14,8 +14,8 @@
 
 {% if person and hub_organization_id is not none and hub_organization_id in linked_organization_ids_for_hub %}
 <p class="hub-corpus-banner contextual-note" role="status">
-  At least one affiliated organization matches the configured <strong>Hub corpus organization</strong> —
-  configure under <a href="{{ url_for('admin.leads_list') }}">Leads</a>.
+  At least one affiliated organization is designated as the <strong>Hub organization</strong>
+  {% if hub_organization_slug %}— <a href="{{ url_for('admin.organizations_edit', oid=hub_organization_id) }}">view organization</a>{% endif %}.
 </p>
 {% endif %}
 

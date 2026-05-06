@@ -970,6 +970,24 @@ body.admin {
   border: 1px solid rgba(59, 130, 246, 0.18);
 }
 
+.flash-links {
+  margin-left: 0.45rem;
+}
+
+.flash-link {
+  color: inherit;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.flash-link:hover {
+  opacity: 0.9;
+}
+
+.flash-link-sep {
+  opacity: 0.75;
+}
+
 .admin h1 {
   padding: 0;
   margin: 0;
@@ -1358,6 +1376,14 @@ body.admin {
   margin-top: 0.75rem;
 }
 
+.dash-card-footer-status {
+  margin: 0.78rem 0 0;
+  padding-top: 0.62rem;
+  border-top: 1px solid rgba(20, 20, 20, 0.08);
+  font-size: 0.81rem;
+  line-height: 1.35;
+}
+
 .identity-stale-tbl {
   margin: 0;
   border: none;
@@ -1610,20 +1636,6 @@ body.admin {
   cursor: wait;
 }
 
-/* Digest admin: freeze peer Build buttons without :disabled (avoids all-gray + layout shift). */
-#digest-admin-page.digest-llm-sync-running button[type="submit"][data-digest-peer-only="1"] {
-  pointer-events: none;
-  cursor: wait;
-  opacity: 1;
-}
-
-.digest-subjects-llm-status {
-  margin: 0.9rem 0 0;
-  font-size: 0.9rem;
-  line-height: 1.45;
-  max-width: 48rem;
-}
-
 .disapprove-btn {
   padding: 0.4rem 0.78rem;
   border-radius: var(--radius-tight);
@@ -1765,10 +1777,6 @@ body.admin {
   text-align: center;
   vertical-align: middle;
   font-variant-numeric: tabular-nums;
-}
-
-.tbl tbody tr.tbl-row-digest-stale td {
-  background-color: rgba(254, 226, 226, 0.55);
 }
 
 .leads-leads-table tbody td.tbl-col-check {

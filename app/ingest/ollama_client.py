@@ -8,11 +8,12 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from app.ingest.llm_common import parse_model_json_object as _parse_model_json_object
+
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
 GENERATE_TIMEOUT = 120.0
 LEAD_REPORT_GENERATE_TIMEOUT = float(os.environ.get("SYNAPSE_LEAD_REPORT_OLLAMA_TIMEOUT", "900") or "900")
-PUBLIC_DIGEST_GENERATE_TIMEOUT = float(os.environ.get("SYNAPSE_PUBLIC_DIGEST_OLLAMA_TIMEOUT", "300") or "300")
 PUBLIC_FEED_CURATE_GENERATE_TIMEOUT = float(
     os.environ.get("SYNAPSE_PUBLIC_FEED_CURATE_OLLAMA_TIMEOUT", "180") or "180"
 )
@@ -97,62 +98,6 @@ def generate_non_stream(
     return (body.get("response") or "").strip()
 
 
-def _unwrap_json_root_dict(val: Any) -> dict[str, Any] | None:
-    """Use a JSON object, or the first object inside a JSON array (common model quirk)."""
-
-    if isinstance(val, dict):
-        return val
-    if isinstance(val, list):
-        for item in val:
-            if isinstance(item, dict):
-                return item
-    return None
-
-
-def _parse_model_json_object(text: str) -> dict[str, Any] | None:
-    """Parse a JSON object from model output; tolerate fences, chatter, trailing text, array wrappers."""
-
-    t = (text or "").strip()
-    if not t:
-        return None
-    if t.startswith("```"):
-        rest = t[3:].lstrip()
-        if rest.lower().startswith("json"):
-            rest = rest[4:].lstrip("\n ")
-        fence = rest.rfind("```")
-        if fence != -1:
-            rest = rest[:fence]
-        t = rest.strip()
-    decoder = json.JSONDecoder()
-
-    def _try_segment(s: str, start_idx: int) -> dict[str, Any] | None:
-        head = start_idx
-        while head < len(s) and s[head].isspace():
-            head += 1
-        if head >= len(s) or s[head] not in "{[":
-            return None
-        try:
-            parsed, _end = decoder.raw_decode(s, head)
-        except json.JSONDecodeError:
-            return None
-        return _unwrap_json_root_dict(parsed)
-
-    # Scan each `{`/`[` in case the model added a preamble or trailing explanation
-    for i, ch in enumerate(t):
-        if ch in "{[":
-            got = _try_segment(t, i)
-            if got is not None:
-                return got
-    start, end = t.find("{"), t.rfind("}")
-    if start != -1 and end > start:
-        try:
-            data = json.loads(t[start : end + 1])
-            return _unwrap_json_root_dict(data)
-        except json.JSONDecodeError:
-            pass
-    return None
-
-
 def html_page_llm_prompt_char_budget() -> int:
     """Max characters of plaintext from the page appended to the summarization prompt (env override)."""
 
@@ -186,30 +131,25 @@ def try_summarize_html_page(
     plaintext_excerpt: str,
     max_prompt_chars: int | None = None,
 ) -> dict[str, Any] | None:
-    """LLM condensation for html_page ingestion. Expected keys: title, snippet (paragraphs OK).
+    """LLM condensation for html_page ingestion. Expected keys: title, snippet.
 
-    Larger pages need more excerpt + a longer instructed snippet target so downstream lead reports
-    and personas see concrete technical language, not brochure-level fluff.
+    Uses the externalized prompts/html_page_ingest.txt template so the model receives
+    domain context (neuroscience research intelligence) rather than a generic summarization task.
     """
+    from app.identity.prompt import build_html_page_ingest_prompt
+
     budget = html_page_llm_prompt_char_budget() if max_prompt_chars is None else max(8_192, max_prompt_chars)
     excerpt = (plaintext_excerpt or "")[:budget].strip()
     title_hint = (page_title_guess or "").strip()[:400]
     target_snip = html_page_llm_snippet_target_chars()
-    hard_snip_ceiling = target_snip + max(2400, target_snip // 4)
-    prompt = (
-        "You distill public web pages into a structured record for downstream research ingest and analytics. "
-        "Return ONLY compact JSON without markdown fences. Keys exactly: "
-        "title (short factual headline grounded in page content); "
-        f"snippet (dense prose preserving technical specificity: numbered lists, capacities, tooling, specs, units, named programs, memberships, timelines. "
-        f"Aim for roughly up to ~{target_snip} Unicode characters—use as much of that budget as warranted by the excerpt; "
-        f"prefer staying under ~{hard_snip_ceiling} characters. Omit marketing fluff, generic mission statements-only if more concrete detail exists; merge duplicates). "
-        "If the excerpt is sparse, faithfully summarize everything usable.\n"
-        f"Page URL: {url}\nHTML title hint: {title_hint or '(none)'}\n"
-        "Visible text excerpt (may be truncated):\n"
-        f"{excerpt}"
+    prompt = build_html_page_ingest_prompt(
+        page_url=url,
+        page_title_hint=title_hint or "(none)",
+        plaintext_excerpt=excerpt,
+        target_chars=target_snip,
     )
     try:
-        text = generate_non_stream(prompt)
+        text = generate_non_stream(prompt, json_format=True)
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
         return None
     return _parse_model_json_object(text)
@@ -264,20 +204,6 @@ def _generate_prompt_text(
     return text.strip(), True
 
 
-def run_identity_llm(prompt: str) -> tuple[dict[str, Any] | None, str]:
-    """Person persona JSON prompt → ``(dict|None, raw_model_text_if_any)``."""
-
-    text, ok = _generate_prompt_text(
-        prompt,
-        json_format=_identity_uses_ollama_json_format(),
-        options=_identity_ollama_options(),
-    )
-    if not ok:
-        return None, ""
-    parsed = _parse_model_json_object(text)
-    return parsed, text
-
-
 def _lead_report_num_ctx() -> int:
     raw = (os.environ.get("SYNAPSE_LEAD_REPORT_NUM_CTX") or "65536").strip()
     try:
@@ -287,8 +213,8 @@ def _lead_report_num_ctx() -> int:
     return max(8192, min(n, 262144))
 
 
-def run_lead_report_llm(prompt: str, *, json_format: bool = True) -> dict[str, Any] | None:
-    """Long-context structured calls for Hub-centric lead reports (larger ``num_ctx`` + timeout)."""
+def ollama_run_lead_report_llm(prompt: str, *, json_format: bool = True) -> dict[str, Any] | None:
+    """Ollama backend for Hub-centric lead reports (larger ``num_ctx`` + timeout)."""
 
     opts = {"num_ctx": _lead_report_num_ctx()}
     try:
@@ -297,31 +223,6 @@ def run_lead_report_llm(prompt: str, *, json_format: bool = True) -> dict[str, A
             json_format=json_format,
             options=opts,
             timeout=LEAD_REPORT_GENERATE_TIMEOUT,
-        )
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
-        return None
-    return _parse_model_json_object(text)
-
-
-def _public_digest_num_ctx() -> int:
-    raw = (os.environ.get("SYNAPSE_PUBLIC_DIGEST_NUM_CTX") or "32768").strip()
-    try:
-        n = int(raw)
-    except ValueError:
-        n = 32768
-    return max(8192, min(n, 131072))
-
-
-def run_public_digest_llm(prompt: str) -> dict[str, Any] | None:
-    """JSON-shaped public digest summaries (separate from lead reports)."""
-
-    opts = {"num_ctx": _public_digest_num_ctx()}
-    try:
-        text = generate_non_stream(
-            prompt,
-            json_format=True,
-            options=opts,
-            timeout=PUBLIC_DIGEST_GENERATE_TIMEOUT,
         )
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
         return None
@@ -337,8 +238,8 @@ def _public_feed_curate_num_ctx() -> int:
     return max(8192, min(n, 65536))
 
 
-def run_public_feed_curate_llm(prompt: str) -> dict[str, Any] | None:
-    """JSON object with ``results`` array for public Latest curation."""
+def ollama_run_public_feed_curate_llm(prompt: str) -> dict[str, Any] | None:
+    """Ollama backend: JSON object with ``results`` array for public Latest curation."""
 
     opts = {"num_ctx": _public_feed_curate_num_ctx()}
     try:
@@ -351,6 +252,26 @@ def run_public_feed_curate_llm(prompt: str) -> dict[str, Any] | None:
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
         return None
     return _parse_model_json_object(text)
+
+
+def run_identity_llm(prompt: str) -> tuple[dict[str, Any] | None, str]:
+    """Delegates to :mod:`app.ingest.llm_client` for OpenAI vs Ollama routing."""
+
+    from app.ingest.llm_client import run_identity_llm as _run
+
+    return _run(prompt)
+
+
+def run_lead_report_llm(prompt: str, *, json_format: bool = True) -> dict[str, Any] | None:
+    from app.ingest.llm_client import run_lead_report_llm as _run
+
+    return _run(prompt, json_format=json_format)
+
+
+def run_public_feed_curate_llm(prompt: str) -> dict[str, Any] | None:
+    from app.ingest.llm_client import run_public_feed_curate_llm as _run
+
+    return _run(prompt)
 
 
 def try_enrich_lead(title: str, link: str, snippet: str) -> dict[str, Any] | None:

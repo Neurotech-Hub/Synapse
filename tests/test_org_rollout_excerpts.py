@@ -66,6 +66,7 @@ def test_org_attached_sources_listed_before_member_and_cap_member(tmp_path):
         text = _thin_excerpts_for_org(o.id, cap_items=24)
         assert text.startswith("OFFICIAL_ORG_SOURCES\n")
         assert "About — Psychiatry" in text
-        assert "MEMBER_AFFILIATED_SOURCES\n" in text
-        # Member slice capped: at most 10 "Paper" lines when org-owned sources exist
-        assert text.count("title=Paper") <= 10
+        # Member-affiliated excerpts are intentionally omitted when org-owned sources exist;
+        # member persona JSON is passed separately to the LLM prompt.
+        assert "MEMBER_AFFILIATED_SOURCES\n" not in text
+        assert "title=Paper" not in text

@@ -7,7 +7,6 @@ from app.auth import Operator
 from app.config import get_config
 from app.extensions import db, limiter, login_manager, migrate
 from app.jinja_datetime import local_dt_markup
-from app.public_digest.build import normalize_public_digest_summary
 from app.web.admin import admin_bp
 from app.web.public_routes import public_bp
 
@@ -40,10 +39,6 @@ def create_app(override_config: dict | None = None) -> Flask:
 
     flask_app.register_blueprint(public_bp)
     flask_app.register_blueprint(admin_bp)
-
-    @flask_app.template_filter("format_public_digest")
-    def _format_public_digest_filter(text):
-        return normalize_public_digest_summary("" if text is None else str(text))
 
     @flask_app.template_filter("local_dt")
     def _local_dt_filter(dt, style="datetime"):

@@ -376,6 +376,10 @@ body.public {
   max-width: 52rem;
 }
 
+.main-stack--entity {
+  max-width: 66rem;
+}
+
 .public-page-hero {
   margin-bottom: 2rem;
 }
@@ -524,6 +528,13 @@ body.public {
   line-height: 1.5;
 }
 
+.public-card-meta-date {
+  margin: 0.65rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  letter-spacing: 0.01em;
+}
+
 .public-card-batch-list {
   margin: 0;
   padding-left: 1.1rem;
@@ -539,45 +550,6 @@ body.public {
   margin: 0;
 }
 
-.public-entity-grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-
-.public-entity-card {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  padding: 1rem 1.15rem;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--stroke);
-  background: var(--surface-solid);
-  text-decoration: none;
-  color: inherit;
-  box-shadow: var(--shadow-soft);
-  transition: border-color 0.15s ease, transform 0.1s ease;
-}
-
-.public-entity-card:hover {
-  border-color: var(--stroke-strong);
-  transform: translateY(-1px);
-}
-
-.public-entity-name {
-  font-weight: 600;
-  font-size: 1.05rem;
-}
-
-.public-entity-meta {
-  font-size: 0.88rem;
-  color: var(--text-soft);
-}
 
 .public-empty {
   padding: 1.25rem;
@@ -587,13 +559,70 @@ body.public {
 }
 
 .public-entity-page {
-  max-width: 40rem;
+  max-width: 62rem;
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 13rem);
+  grid-template-rows: auto 1fr;
+  column-gap: 3rem;
+  align-items: start;
 }
 
 .public-entity-header {
+  grid-column: 1;
   margin-bottom: 2rem;
 }
 
+.public-entity-main {
+  grid-column: 1;
+}
+
+.public-entity-sidebar {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  font-size: 0.92rem;
+  padding-top: 0.25rem;
+}
+
+.public-entity-sidebar .public-section-title {
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 0.65rem;
+}
+
+.public-persona-lead {
+  margin: 0.75rem 0 0;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.public-focus {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+}
+
+.public-persona-disclaimer {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+@media (max-width: 640px) {
+  .public-entity-page {
+    grid-template-columns: 1fr;
+  }
+
+  .public-entity-sidebar {
+    grid-column: 1;
+    grid-row: auto;
+    order: 3;
+  }
+}
+
+/* kept for backward compat — no longer used in templates */
 .public-persona-note {
   margin-top: 1rem;
   padding: 1rem 1.15rem;
@@ -620,13 +649,6 @@ body.public {
 
 .public-section {
   margin-bottom: 2rem;
-}
-
-.public-digest-body {
-  font-size: 1rem;
-  line-height: 1.6;
-  color: var(--text);
-  white-space: pre-wrap;
 }
 
 .public-muted {

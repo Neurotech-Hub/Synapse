@@ -1,2 +1,0 @@
-PIPELINE_SEMVER = "public_digest/1"
-PROMPT_VERSION = "3"

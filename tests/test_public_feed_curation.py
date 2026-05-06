@@ -231,30 +231,17 @@ def test_run_public_feed_curation_batch_mocked_llm(app):
         assert rb.public_feed_display_title is None
 
 
-def test_digest_page_shows_public_feed_section(client):
+def test_items_public_feed_curate_status_unknown(client):
     client.post(
         "/admin/login",
         data={"password": "test-pass", "submit": "Sign in"},
         follow_redirects=True,
     )
-    r = client.get("/admin/digest")
-    assert r.status_code == 200
-    assert b"Curate public feed" in r.data
-    assert b"Uncurated public Latest candidates" in r.data
-    assert b"every" in r.data.lower()
-
-
-def test_digest_public_feed_curate_status_unknown(client):
-    client.post(
-        "/admin/login",
-        data={"password": "test-pass", "submit": "Sign in"},
-        follow_redirects=True,
-    )
-    r = client.get("/admin/digest/public-feed-curate-status?run_id=nope")
+    r = client.get("/admin/items/public-feed-curate-status?run_id=nope")
     assert r.status_code == 404
 
 
-def test_digest_curate_post_redirects_with_run_id(client):
+def test_items_curate_post_redirects_with_run_id(client):
     client.post(
         "/admin/login",
         data={"password": "test-pass", "submit": "Sign in"},
@@ -265,7 +252,7 @@ def test_digest_curate_post_redirects_with_run_id(client):
         return_value=("run-xyz-1", ""),
     ):
         r = client.post(
-            "/admin/digest/curate-public-feed",
+            "/admin/items/curate-public-feed",
             data={},
             follow_redirects=False,
         )

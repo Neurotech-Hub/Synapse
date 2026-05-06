@@ -29,6 +29,7 @@
     {% block content %}{% endblock %}
   </main>
 
+  <script src="{{ url_for('static', filename='admin_dt_local.js') }}"></script>
   <footer class="site-foot">
     <nav class="foot-nav" aria-label="Footer">
       <a href="{{ url_for('admin.login') }}" class="foot-nav-link">Team sign-in</a>

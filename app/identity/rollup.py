@@ -16,9 +16,21 @@ from app.domain.entity_associations import organization_ids_for_building
 from app.extensions import db
 from app.identity.builder import IDENTITY_PROMPT_VERSION, apply_parsed_persona_payload
 from app.identity.prompt import build_organization_persona_prompt, build_place_persona_prompt
+from app.identity.rebuild_modes import (
+    default_manual_rebuild_mode,
+    poll_persona_rebuild_mode,
+)
 from app.ingest.html_extract import plaintext_excerpt as _plaintext_excerpt
-from app.ingest.ollama_client import OLLAMA_MODEL, run_identity_llm
+from app.ingest.llm_client import identity_llm_model_label, run_identity_llm
 from app.models import Building, ContentItem, Organization, Person, PersonaSnapshot, Source
+
+
+def _persona_json_str(sn: PersonaSnapshot | None) -> str | None:
+    if sn is None:
+        return None
+    d = _persona_mini_dict(sn)
+    raw = json.dumps(d, ensure_ascii=False, indent=2)
+    return raw[:14_000]
 
 
 def _persona_mini_dict(sn: PersonaSnapshot | None) -> dict[str, Any]:
@@ -102,66 +114,70 @@ def sync_hub_persona_from_file(org: Organization) -> dict[str, Any]:
     return {"organization_id": org.id, "status": "ok", "detail": "synced from hub_persona.json"}
 
 
+def _content_item_excerpt_line(ci: ContentItem, excerpt_chars: int) -> str:
+    """Single labeled block for one ContentItem, including source kind and URL."""
+    src = ci.source
+    src_kind = (src.kind if src else "") or "unknown"
+    src_url = (src.url if src else "") or ""
+    tit = (ci.title or "").strip()
+    sn = _plaintext_excerpt(ci.snippet or "", excerpt_chars).strip()
+    return f"SOURCE_KIND={src_kind}\nSOURCE_URL={src_url}\ntitle={tit}\nexcerpt={sn}"
+
+
 def _content_item_excerpt_lines(items: Iterable[ContentItem], excerpt_chars: int) -> list[str]:
-    lines: list[str] = []
-    for ci in items:
-        tit = (ci.title or "").strip()
-        sn = _plaintext_excerpt(ci.snippet or "", excerpt_chars).strip()
-        lines.append(f"title={tit}\nexcerpt={sn}")
-    return lines
+    return [_content_item_excerpt_line(ci, excerpt_chars) for ci in items]
 
 
 def _thin_excerpts_for_org(organization_id: int, *, cap_items: int = 24, excerpt_chars: int = 800) -> str:
-    """Prefer content from sources attached directly to the org (official site/feeds) over member RSS floods."""
+    """Feed org-owned source content as primary evidence; member RSS as fallback only."""
 
     oid = int(organization_id)
     eligible = identity_eligible_source_ids_for_organization(oid)
     if not eligible:
         return "(none)"
 
-    org_owned_ids = [
-        int(r[0])
-        for r in Source.query.with_entities(Source.id)
+    org_owned_rows = (
+        Source.query.with_entities(Source.id, Source.kind)
         .filter(Source.organization_id == oid, Source.id.in_(eligible))
         .order_by(Source.id.asc())
         .all()
-    ]
+    )
+    org_owned_ids = [int(r[0]) for r in org_owned_rows]
+    org_owned_kinds = {int(r[0]): r[1] for r in org_owned_rows}
     org_set = set(org_owned_ids)
     member_ids = [sid for sid in eligible if sid not in org_set]
 
     if org_owned_ids:
-        # When the org has its own sources, reserve most of the budget for them and cap member items so
-        # one PI's feed cannot drown out the department website (html_page often has a single ContentItem).
-        member_cap = min(10, max(4, cap_items // 4))
-        org_limit = max(1, cap_items - member_cap)
+        # Give HTML sources a much larger character budget — they carry full page text that defines
+        # mission and scope. RSS items on the org get the standard budget.
+        has_html = any(k == "html_page" for k in org_owned_kinds.values())
+        html_chars = 3000
+        rss_chars = max(excerpt_chars, 800)
+
         org_items = (
             ContentItem.query.filter(ContentItem.source_id.in_(org_owned_ids))
+            .options(joinedload(ContentItem.source))
             .order_by(desc(ContentItem.first_seen_at))
-            .limit(org_limit)
+            .limit(cap_items)
             .all()
         )
-        org_chars = min(2400, int(excerpt_chars) * 3)
-        org_lines = _content_item_excerpt_lines(org_items, org_chars)
-        mem_lines: list[str] = []
-        remaining = cap_items - len(org_lines)
-        if remaining > 0 and member_ids:
-            member_cap_eff = min(remaining, member_cap)
-            mem_items = (
-                ContentItem.query.filter(ContentItem.source_id.in_(member_ids))
-                .order_by(desc(ContentItem.first_seen_at))
-                .limit(member_cap_eff)
-                .all()
-            )
-            mem_lines = _content_item_excerpt_lines(mem_items, excerpt_chars)
+        org_lines: list[str] = []
+        for ci in org_items:
+            src_kind = (ci.source.kind if ci.source else "") or "unknown"
+            chars = html_chars if src_kind == "html_page" else rss_chars
+            org_lines.append(_content_item_excerpt_line(ci, chars))
+
+        # When org-owned sources exist, member excerpts are omitted entirely: the member persona
+        # JSON blob is already passed to the prompt and is the correct vehicle for that information.
         parts: list[str] = []
         if org_lines:
             parts.append("OFFICIAL_ORG_SOURCES\n" + "\n---\n".join(org_lines))
-        if mem_lines:
-            parts.append("MEMBER_AFFILIATED_SOURCES\n" + "\n---\n".join(mem_lines))
         return "\n\n".join(parts) if parts else "(none)"
 
+    # No org-owned sources — fall back to member-affiliated RSS excerpts.
     cids = (
         ContentItem.query.filter(ContentItem.source_id.in_(eligible))
+        .options(joinedload(ContentItem.source))
         .order_by(desc(ContentItem.first_seen_at))
         .limit(cap_items)
         .all()
@@ -177,6 +193,7 @@ def rebuild_organization_persona(
     *,
     skip_if_same_fingerprint: bool = False,
     user_initiated: bool = False,
+    rebuild_mode: str | None = None,
 ) -> dict[str, Any]:
     outcome: dict[str, Any] = {"organization_id": organization_id, "status": "skipped", "detail": ""}
     org = db.session.get(Organization, organization_id)
@@ -198,6 +215,7 @@ def rebuild_organization_persona(
         d["person_name"] = p.display_name
         member_payload.append(d)
 
+    eligible_source_ids = identity_eligible_source_ids_for_organization(org.id)
     excerpts = _thin_excerpts_for_org(org.id)
     rollup_fp_src = json.dumps(member_payload, ensure_ascii=False, sort_keys=True) + "\n|\n" + excerpts
     from hashlib import sha256
@@ -214,11 +232,25 @@ def rebuild_organization_persona(
         outcome["detail"] = "unchanged fingerprint"
         return outcome
 
+    mode_raw = rebuild_mode
+    if mode_raw is None:
+        mode_raw = default_manual_rebuild_mode() if user_initiated else poll_persona_rebuild_mode()
+    eff_mode = (mode_raw or "full").strip().lower()
+    if eff_mode not in ("full", "incremental", "light_refresh"):
+        eff_mode = "full"
+    if eff_mode in ("incremental", "light_refresh") and (row.build_status != "ok" or not row.generated_at):
+        eff_mode = "full"
+    prev_org_json = _persona_json_str(row) if eff_mode in ("incremental", "light_refresh") else None
+
     if not member_payload and excerpts.strip() == "(none)":
+        if eligible_source_ids:
+            msg = "Org has attached sources, but no ingested content yet. Run Poll now to fetch source content first."
+        else:
+            msg = "No member personas and no org-associated source excerpts."
         row.prompt_version = IDENTITY_PROMPT_VERSION
         row.input_fingerprint = fp
         row.build_status = "stale"
-        row.build_error = "No member personas and no org-associated source excerpts."
+        row.build_error = msg
         row.updated_at = datetime.now(timezone.utc)
         db.session.commit()
         outcome["status"] = "empty"
@@ -234,6 +266,8 @@ def rebuild_organization_persona(
         organization_blob=org_blob,
         member_personas_json=mp_json,
         source_excerpts=excerpts,
+        rebuild_mode=eff_mode,
+        previous_persona_json=prev_org_json,
     )
     gen_at = datetime.now(timezone.utc)
     parsed, raw_model_text = run_identity_llm(prompt)
@@ -248,7 +282,7 @@ def rebuild_organization_persona(
                 f" Raw output (truncated): {snippet}" if snippet else ""
             )
             row.updated_at = gen_at
-            row.model_used = OLLAMA_MODEL
+            row.model_used = identity_llm_model_label()
             db.session.commit()
             outcome["status"] = "failed"
             outcome["detail"] = row.build_error or ""
@@ -275,7 +309,7 @@ def rebuild_organization_persona(
     row.build_status = "ok"
     row.build_error = None
     row.generated_at = gen_at
-    row.model_used = OLLAMA_MODEL
+    row.model_used = identity_llm_model_label()
     row.updated_at = gen_at
     db.session.commit()
     outcome["status"] = "ok"
@@ -287,6 +321,7 @@ def rebuild_building_persona(
     *,
     skip_if_same_fingerprint: bool = False,
     user_initiated: bool = False,
+    rebuild_mode: str | None = None,
 ) -> dict[str, Any]:
     outcome: dict[str, Any] = {"building_id": building_id, "status": "skipped", "detail": ""}
     pl = (
@@ -346,6 +381,16 @@ def rebuild_building_persona(
         outcome["detail"] = "unchanged fingerprint"
         return outcome
 
+    mode_raw_b = rebuild_mode
+    if mode_raw_b is None:
+        mode_raw_b = default_manual_rebuild_mode() if user_initiated else poll_persona_rebuild_mode()
+    eff_mode_b = (mode_raw_b or "full").strip().lower()
+    if eff_mode_b not in ("full", "incremental", "light_refresh"):
+        eff_mode_b = "full"
+    if eff_mode_b in ("incremental", "light_refresh") and (row.build_status != "ok" or not row.generated_at):
+        eff_mode_b = "full"
+    prev_place_json = _persona_json_str(row) if eff_mode_b in ("incremental", "light_refresh") else None
+
     org_blob_lines: list[str] = []
     for org in sorted(org_objs, key=lambda x: x.id):
         org_blob_lines.append(
@@ -362,6 +407,8 @@ def rebuild_building_persona(
         place_blob=place_blob,
         member_personas_json=mp_json,
         source_excerpts=excerpts,
+        rebuild_mode=eff_mode_b,
+        previous_persona_json=prev_place_json,
     )
     gen_at = datetime.now(timezone.utc)
     parsed, raw_model_text = run_identity_llm(prompt)
@@ -376,7 +423,7 @@ def rebuild_building_persona(
                 f" Raw output (truncated): {snippet}" if snippet else ""
             )
             row.updated_at = gen_at
-            row.model_used = OLLAMA_MODEL
+            row.model_used = identity_llm_model_label()
             db.session.commit()
             outcome["status"] = "failed"
             outcome["detail"] = row.build_error or ""
@@ -402,7 +449,7 @@ def rebuild_building_persona(
     row.build_status = "ok"
     row.build_error = None
     row.generated_at = gen_at
-    row.model_used = OLLAMA_MODEL
+    row.model_used = identity_llm_model_label()
     row.updated_at = gen_at
     db.session.commit()
     outcome["status"] = "ok"

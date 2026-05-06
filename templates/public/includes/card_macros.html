@@ -1,0 +1,98 @@
+{# Shared card macros for the public site.
+   Usage:
+     {% from "public/includes/card_macros.html" import entity_card, reveal_script %}
+     {{ entity_card(entity, url, reveal_index=loop.index0) }}
+     {{ reveal_script() }}
+#}
+
+{# Renders a person or organization as a public-card, matching the homepage Latest style.
+   entity  — Person or Organization model instance (must have .display_name, .persona optional)
+   url     — href for the card link
+   reveal_index — optional int; when provided the card gets the reveal animation class
+#}
+{% macro entity_card(entity, url, reveal_index=none) %}
+{% set persona = entity.persona if entity.persona and entity.persona.build_status == 'ok' else none %}
+<article class="public-card{% if reveal_index is not none %} public-card--reveal{% endif %}"
+  {% if reveal_index is not none %}style="--reveal-i: {{ reveal_index }};"{% endif %}>
+  <h3 class="public-card-title">
+    <a href="{{ url }}">{{ entity.display_name }}</a>
+  </h3>
+  {% if persona and persona.notes %}
+    <p class="public-card-snippet">{{ persona.notes | truncate(220, True, '…') }}</p>
+  {% endif %}
+  {% if persona and persona.research_focus %}
+    <p class="public-card-meta-date">{{ (persona.research_focus or [])[:4] | join(' · ') }}</p>
+  {% endif %}
+</article>
+{% endmacro %}
+
+{% macro latest_cards(latest_groups) %}
+{% if latest_groups %}
+  <div class="public-latest-cards">
+    {% for card in latest_groups %}
+      {% if card.kind == 'batch' %}
+        <article class="public-card public-card--batch public-card--reveal" style="--reveal-i: {{ loop.index0 }};">
+          <p class="public-card-kicker">{{ card.batch_items | length }} new from {{ (card.source.label or card.source.url) | truncate(52, True, '…') }}</p>
+          <ul class="public-card-batch-list" role="list">
+            {% for it in card.batch_items %}
+              <li>
+                {% if it.link %}
+                  <a href="{{ it.link }}" rel="noopener noreferrer" target="_blank">{{ it.public_latest_card_title }}</a>
+                {% else %}
+                  {{ it.public_latest_card_title }}
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+          {% if card.meta_dt %}
+            <p class="public-card-meta-date">{{ card.meta_label }}: {{ card.meta_dt | local_dt('date') }}</p>
+          {% endif %}
+        </article>
+      {% else %}
+        {% set it = card.item %}
+        <article class="public-card public-card--reveal" style="--reveal-i: {{ loop.index0 }};">
+          <p class="public-card-kicker">via {{ (it.source.label or it.source.url) | truncate(52, True, '…') }}</p>
+          <h3 class="public-card-title">
+            {% if it.link %}
+              <a href="{{ it.link }}" rel="noopener noreferrer" target="_blank">{{ it.public_latest_card_title }}</a>
+            {% else %}
+              {{ it.public_latest_card_title }}
+            {% endif %}
+          </h3>
+          {% if it.public_latest_card_snippet %}
+            <p class="public-card-snippet">{{ it.public_latest_card_snippet | truncate(220, True, '…') }}</p>
+          {% endif %}
+          {% if card.meta_dt %}
+            <p class="public-card-meta-date">{{ card.meta_label }}: {{ card.meta_dt | local_dt('date') }}</p>
+          {% endif %}
+        </article>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endif %}
+{% endmacro %}
+
+{# Inline IntersectionObserver fallback for the public-card--reveal animation.
+   Call once per page that uses entity_card or public-card--reveal cards. #}
+{% macro reveal_script() %}
+<script>
+  (function () {
+    var cards = document.querySelectorAll(".public-card--reveal");
+    if (!cards.length) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      cards.forEach(function (el) { el.classList.add("public-card--visible"); });
+      return;
+    }
+    if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("animation-timeline", "view()")) return;
+    var io = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) e.target.classList.add("public-card--visible");
+        });
+      },
+      { root: null, rootMargin: "0px 0px -12% 0px", threshold: 0.06 }
+    );
+    cards.forEach(function (c) { io.observe(c); });
+  })();
+</script>
+{% endmacro %}

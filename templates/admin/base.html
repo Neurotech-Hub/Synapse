@@ -15,7 +15,6 @@
   {% set dashboard_active = ep == 'admin.dashboard' %}
   {% set sources_active = ep is not none and ep.startswith('admin.sources_') %}
   {% set leads_active = ep is not none and ep.startswith('admin.leads_') %}
-  {% set digest_active = ep is not none and ep.startswith('admin.digest_') %}
   {% set items_active = ep is not none and ep.startswith('admin.items_') %}
   {% set snapshots_all_active = ep == 'admin.snapshots_all' %}
   {% set people_active = ep is not none and ep.startswith('admin.people_') %}
@@ -45,22 +44,33 @@
           </div>
           <hr class="admin-sidebar-rule" aria-hidden="true"/>
           <a href="{{ url_for('admin.leads_list') }}" class="admin-sidebar-link{% if leads_active %} is-active{% endif %}" {% if leads_active %}aria-current="page"{% endif %}>Leads</a>
-          <hr class="admin-sidebar-rule" aria-hidden="true"/>
-          <a href="{{ url_for('admin.digest_index') }}" class="admin-sidebar-link{% if digest_active %} is-active{% endif %}" {% if digest_active %}aria-current="page"{% endif %}>Digest</a>
         </nav>
       </div>
       <div class="admin-sidebar-footer">
-        {% if ollama_llm %}
+        {% if ollama_llm or openai_llm %}
         <div class="admin-sidebar-footer-status" aria-label="LLM status">
+          {% if openai_llm %}
+          {% if openai_llm.configured %}
+          {% if openai_llm.sdk_installed %}
+          <p class="admin-llm-status admin-llm-status--ok" title="OpenAI · {{ openai_llm.identity_provider }} · {{ openai_llm.identity_model }}">OpenAI: key set<span class="admin-llm-detail"> · {{ openai_llm.identity_model }}</span></p>
+          {% else %}
+          <p class="admin-llm-status admin-llm-status--warn" title="Install the openai package in the same Python environment as the Flask app">OpenAI: SDK missing<span class="admin-llm-detail"> · pip install openai</span></p>
+          {% endif %}
+          {% else %}
+          <p class="admin-llm-status admin-llm-status--warn" title="Set OPENAI_API_KEY for persona generation">OpenAI: no key</p>
+          {% endif %}
+          {% endif %}
+          {% if ollama_llm %}
           {% set _llm_title = (
             'Ollama at ' ~ ollama_llm.host ~ ' · configured model ' ~ ollama_llm.model
           ) %}
           {% if ollama_llm.reachable and ollama_llm.model_ok %}
-          <p class="admin-llm-status admin-llm-status--ok" title="{{ _llm_title }}">LLM: OK<span class="admin-llm-detail"> · {{ ollama_llm.model }}</span></p>
+          <p class="admin-llm-status admin-llm-status--ok" title="{{ _llm_title }}">Ollama: OK<span class="admin-llm-detail"> · {{ ollama_llm.model }}</span></p>
           {% elif ollama_llm.reachable %}
-          <p class="admin-llm-status admin-llm-status--warn" title="{{ _llm_title }} · Pull: ollama pull {{ ollama_llm.model }}">LLM: no model<span class="admin-llm-detail"> · {{ ollama_llm.model }}</span></p>
+          <p class="admin-llm-status admin-llm-status--warn" title="{{ _llm_title }} · Pull: ollama pull {{ ollama_llm.model }}">Ollama: no model<span class="admin-llm-detail"> · {{ ollama_llm.model }}</span></p>
           {% else %}
-          <p class="admin-llm-status admin-llm-status--bad" title="{{ _llm_title }} · Start Ollama or set OLLAMA_HOST">LLM: offline</p>
+          <p class="admin-llm-status admin-llm-status--bad" title="{{ _llm_title }} · Start Ollama or set OLLAMA_HOST">Ollama: offline</p>
+          {% endif %}
           {% endif %}
         </div>
         {% endif %}
@@ -80,7 +90,20 @@
     <div class="admin-main">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for cat, msg in messages %}
+          {% if msg is mapping %}
+          <div class="flash flash-{{ cat }}">
+            {% if msg.text %}<span>{{ msg.text }}</span>{% endif %}
+            {% if msg.links %}
+            <span class="flash-links">
+              {% for ln in msg.links %}
+              <a href="{{ ln.href }}" class="flash-link">{{ ln.label }}</a>{% if not loop.last %}<span class="flash-link-sep"> · </span>{% endif %}
+              {% endfor %}
+            </span>
+            {% endif %}
+          </div>
+          {% else %}
           <div class="flash flash-{{ cat }}">{{ msg }}</div>
+          {% endif %}
         {% endfor %}
       {% endwith %}
       {% block body %}{% endblock %}

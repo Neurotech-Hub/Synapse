@@ -15,6 +15,15 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <button type="submit" id="items-refresh-html-submit" class="primary-btn-inline">Refresh all HTML content</button>
     </form>
+    <form
+      id="items-curate-feed-form"
+      method="post"
+      action="{{ url_for('admin.items_curate_public_feed') }}"
+      class="inline-form"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="secondary-btn-inline">Curate public feed</button>
+    </form>
     {% call syn_help.tips_bubble() %}{% include "admin/includes/help_items_list.html" %}{% endcall %}
   </div>
 </header>
@@ -69,15 +78,7 @@
 (function () {
   var form = document.getElementById("items-refresh-html-form");
   if (!form) return;
-  form.addEventListener("submit", function (ev) {
-    if (
-      !window.confirm(
-        "Re-fetch every HTML page source and regenerate title/snippet using current ingest and Ollama settings? This can take a while and does not add snapshot rows."
-      )
-    ) {
-      ev.preventDefault();
-      return;
-    }
+  form.addEventListener("submit", function () {
     var btn = document.getElementById("items-refresh-html-submit");
     if (btn) {
       btn.disabled = true;

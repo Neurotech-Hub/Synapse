@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+from datetime import datetime
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from sqlalchemy.orm import joinedload
@@ -28,8 +28,7 @@ from app.domain.public_sources import (
 )
 from app.extensions import db, limiter
 from app.ingest.urlnorm import UrlValidationError, canonical_url
-from app.models import ContentItem, Organization, Person, PublicActivityDigest, Source
-from app.public_digest.build import latest_ok_digest_for_organization, latest_ok_digest_for_person
+from app.models import ContentItem, Organization, Person, Source
 
 public_bp = Blueprint("public", __name__)
 
@@ -78,6 +77,10 @@ def _latest_feed_groups():
     else:
         raw = latest_public_content_items_globally(limit=400)
 
+    return _latest_cards_from_items(raw), filter_label
+
+
+def _latest_cards_from_items(raw: list[ContentItem]) -> list[dict]:
     raw = dedupe_latest_items_by_source_link(raw)
     visible = [
         ci
@@ -87,38 +90,45 @@ def _latest_feed_groups():
         and not heuristic_uncurated_hide_from_public_latest(ci)
     ]
     capped = apply_per_source_cap(visible, max_per_source=4, take_total=24)
-    return batch_consecutive_by_source(capped, min_batch=2), filter_label
+    cards = batch_consecutive_by_source(capped, min_batch=2)
+    for card in cards:
+        if card.get("kind") == "batch":
+            label, dt = _batch_card_date_meta(card.get("source"), card.get("batch_items", []))
+        else:
+            label, dt = _single_card_date_meta(card.get("item"))
+        card["meta_label"] = label
+        card["meta_dt"] = dt
+    return cards
 
 
-def _cited_highlights(digest: PublicActivityDigest | None, *, limit: int = 10) -> list[ContentItem]:
-    if digest is None or not digest.cited_content_item_ids_json:
-        return []
-    try:
-        raw_ids = json.loads(digest.cited_content_item_ids_json)
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(raw_ids, list) or not raw_ids:
-        return []
-    ids: list[int] = []
-    for x in raw_ids[:limit]:
-        try:
-            ids.append(int(x))
-        except (TypeError, ValueError):
-            continue
-    if not ids:
-        return []
-    rows = (
-        ContentItem.query.filter(ContentItem.id.in_(ids))
-        .options(joinedload(ContentItem.source))
-        .all()
-    )
-    public = [
-        c
-        for c in rows
-        if c.source is not None and (not c.source.pending) and c.source.enabled
-    ]
-    by_id = {c.id: c for c in public}
-    return [by_id[i] for i in ids if i in by_id][:limit]
+def _single_card_date_meta(item: ContentItem | None) -> tuple[str, datetime | None]:
+    if item is None:
+        return "", None
+    source_kind = ((item.source.kind if item.source else "") or "").strip().lower()
+    if source_kind == "rss_feed":
+        if item.published_at is not None:
+            return "Published", item.published_at
+        return "Added", item.first_seen_at
+    if source_kind == "html_page":
+        return "Last checked", item.source.last_poll_at if item.source else None
+    return "Added", item.first_seen_at
+
+
+def _batch_card_date_meta(source: Source | None, items: list[ContentItem]) -> tuple[str, datetime | None]:
+    source_kind = ((source.kind if source else "") or "").strip().lower()
+    if source_kind == "html_page":
+        return "Last checked", source.last_poll_at if source else None
+
+    if source_kind == "rss_feed":
+        date_rows = [it.published_at if it.published_at is not None else it.first_seen_at for it in items]
+        valid_dates = [dt for dt in date_rows if dt is not None]
+        if not valid_dates:
+            return "Published through", None
+        all_have_published = all(it.published_at is not None for it in items)
+        return ("Published through" if all_have_published else "Added through"), max(valid_dates)
+
+    valid_dates = [it.first_seen_at for it in items if it.first_seen_at is not None]
+    return "Added through", (max(valid_dates) if valid_dates else None)
 
 
 @public_bp.route("/", methods=["GET", "POST"])
@@ -207,35 +217,41 @@ def organizations_list():
 
 @public_bp.route("/people/<slug>")
 def person_detail(slug: str):
-    person = Person.query.filter_by(slug=slug).first()
+    person = Person.query.options(joinedload(Person.organizations)).filter_by(slug=slug).first()
     if person is None or not person_is_publicly_listable(person.id):
         abort(404)
-    digest = latest_ok_digest_for_person(person.id)
-    highlights = _cited_highlights(digest)
     persona = getattr(person, "persona", None)
+    affiliated_organizations = sorted(
+        [o for o in person.organizations if organization_is_publicly_listable(o.id)],
+        key=lambda o: (o.display_name or "").lower(),
+    )
+    latest_groups = _latest_cards_from_items(public_content_items_for_person(person.id, limit=400))
     return render_template(
         "public/person_detail.html",
         person=person,
-        digest=digest,
-        highlights=highlights,
         persona=persona,
+        latest_groups=latest_groups,
+        affiliated_organizations=affiliated_organizations,
         nav_active="people",
     )
 
 
 @public_bp.route("/organizations/<slug>")
 def organization_detail(slug: str):
-    organization = Organization.query.filter_by(slug=slug).first()
+    organization = Organization.query.options(joinedload(Organization.people)).filter_by(slug=slug).first()
     if organization is None or not organization_is_publicly_listable(organization.id):
         abort(404)
-    digest = latest_ok_digest_for_organization(organization.id)
-    highlights = _cited_highlights(digest)
     persona = getattr(organization, "persona", None)
+    affiliated_people = sorted(
+        [p for p in organization.people if person_is_publicly_listable(p.id)],
+        key=lambda p: (p.display_name or "").lower(),
+    )
+    latest_groups = _latest_cards_from_items(public_content_items_for_organization(organization.id, limit=400))
     return render_template(
         "public/organization_detail.html",
         organization=organization,
-        digest=digest,
-        highlights=highlights,
         persona=persona,
+        latest_groups=latest_groups,
+        affiliated_people=affiliated_people,
         nav_active="organizations",
     )

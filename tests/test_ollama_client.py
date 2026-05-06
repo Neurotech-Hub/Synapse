@@ -13,6 +13,8 @@ def test_run_identity_llm_uses_json_format_by_default(monkeypatch) -> None:
             '"funding_signals":[],"collab_openness_score":0.5,"notes":"n"}'
         )
 
+    monkeypatch.setenv("SYNAPSE_LLM_IDENTITY_PROVIDER", "ollama")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setattr(ollama_client, "generate_non_stream", capture)
     monkeypatch.delenv("SYNAPSE_OLLAMA_IDENTITY_JSON_FORMAT", raising=False)
     monkeypatch.delenv("SYNAPSE_OLLAMA_IDENTITY_OPTIONS", raising=False)
@@ -34,6 +36,8 @@ def test_run_identity_llm_skips_num_ctx_when_disabled(monkeypatch) -> None:
         got = options
         return "{}"
 
+    monkeypatch.setenv("SYNAPSE_LLM_IDENTITY_PROVIDER", "ollama")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setattr(ollama_client, "generate_non_stream", capture)
     monkeypatch.setenv("SYNAPSE_OLLAMA_IDENTITY_NUM_CTX", "0")
     monkeypatch.delenv("SYNAPSE_OLLAMA_IDENTITY_OPTIONS", raising=False)

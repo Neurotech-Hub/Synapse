@@ -10,6 +10,7 @@
           action="{{ url_for('admin.people_refresh_identity', pid=entity.id) }}"
           class="persona-dash-refresh"
           id="persona-refresh-form"
+          data-persona-busy-message="{{ persona_rebuild_busy_message | e }}"
         >
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
           <button type="submit" class="primary-btn-inline persona-dash-refresh-btn" data-persona-refresh-submit>
@@ -119,7 +120,8 @@
     btn.textContent = "Rebuilding…";
     if (stat) {
       stat.hidden = false;
-      stat.textContent = "Running local model — leave this tab open.";
+      var busy = (form.getAttribute("data-persona-busy-message") || "").trim();
+      stat.textContent = busy || "Rebuilding — leave this tab open.";
     }
   });
   window.addEventListener("pageshow", function () {

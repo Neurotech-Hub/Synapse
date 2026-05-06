@@ -29,8 +29,6 @@ class Organization(db.Model):
     display_name = db.Column(db.String(512), nullable=False)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
-    #: Set by ingest when new public content may warrant a new public digest (cleared when digest build succeeds).
-    public_digest_stale = db.Column(db.Boolean, nullable=False, default=False)
     #: True for the Neurotech Hub org — persona synced from hub_persona.json, not rebuilt by LLM.
     is_hub = db.Column(db.Boolean, nullable=False, default=False)
 
@@ -48,7 +46,6 @@ class Person(db.Model):
     display_name = db.Column(db.String(512), nullable=False)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
-    public_digest_stale = db.Column(db.Boolean, nullable=False, default=False)
 
     organizations = db.relationship("Organization", secondary=person_organization, back_populates="people")
 
@@ -166,6 +163,7 @@ class Source(db.Model):
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     pending = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_poll_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     #: Public submit hints intended owner classification (approved in admin sets XOR FK).
     ownership_hint = db.Column(db.String(32), nullable=True)  # person | organization
@@ -227,36 +225,6 @@ class SourceSnapshot(db.Model):
     body_sha256 = db.Column(db.String(64), nullable=False)
 
     source = db.relationship("Source", back_populates="snapshots")
-
-
-class PublicActivityDigest(db.Model):
-    """Audience-facing digest of recent ingest for one person or organization (separate from admin LeadReport)."""
-
-    __tablename__ = "public_activity_digest"
-    __table_args__ = (
-        CheckConstraint(
-            "(CASE WHEN person_id IS NOT NULL THEN 1 ELSE 0 END + "
-            "CASE WHEN organization_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
-            name="ck_public_activity_digest_target_one",
-        ),
-    )
-
-    id = db.Column(db.Integer, primary_key=True)
-    person_id = db.Column(db.Integer, db.ForeignKey("person.id", ondelete="CASCADE"), nullable=True)
-    organization_id = db.Column(db.Integer, db.ForeignKey("organization.id", ondelete="CASCADE"), nullable=True)
-
-    summary_text = db.Column(db.Text, nullable=True)
-    cited_content_item_ids_json = db.Column(db.Text, nullable=True)
-    input_fingerprint = db.Column(db.String(128), nullable=True)
-    prompt_version = db.Column(db.String(64), nullable=False, default="1")
-    model_used = db.Column(db.String(128), nullable=True)
-    status = db.Column(db.String(16), nullable=False, default="ok")  # ok | failed
-    error_detail = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
-    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
-
-    person = db.relationship("Person", foreign_keys=[person_id], backref="public_activity_digests")
-    organization = db.relationship("Organization", foreign_keys=[organization_id], backref="public_activity_digests")
 
 
 class LeadReport(db.Model):

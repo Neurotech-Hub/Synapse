@@ -1,13 +1,14 @@
 """Lightweight HTTP tests (in-memory SQLite)."""
 
 import os
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import PollLog, Source
+from app.models import ContentItem, Organization, Person, PollLog, Source
 
 pytestmark = pytest.mark.usefixtures("_admin_env")
 
@@ -51,19 +52,89 @@ def test_public_people_and_orgs_lists(client):
     assert client.get("/organizations/").status_code == 200
 
 
-def test_admin_digest_page(client):
-    client.post(
-        "/admin/login",
-        data={"password": "test-pass", "submit": "Sign in"},
-        follow_redirects=True,
-    )
-    r = client.get("/admin/digest")
-    assert r.status_code == 200
-    assert b"Public digest" in r.data
-    assert b"/admin/digest/build-all" in r.data
-    assert b"digest-llm-sync-submit" in r.data
-    assert b"digest-build-all-form" in r.data
-    assert b"Stale" in r.data
+def test_public_detail_pages_show_filtered_affiliations(app, client):
+    with app.app_context():
+        person_public = Person(slug="p_public", display_name="Public Person", notes=None)
+        person_hidden = Person(slug="p_hidden", display_name="Hidden Person", notes=None)
+        org_public = Organization(slug="o_public", display_name="Public Org", notes=None)
+        org_hidden = Organization(slug="o_hidden", display_name="Hidden Org", notes=None)
+        person_public.organizations.extend([org_public, org_hidden])
+        person_hidden.organizations.append(org_public)
+        db.session.add_all([person_public, person_hidden, org_public, org_hidden])
+        db.session.flush()
+        db.session.add_all(
+            [
+                Source(
+                    url="https://example.org/person-public.xml",
+                    kind="rss_feed",
+                    enabled=True,
+                    pending=False,
+                    person_id=person_public.id,
+                ),
+                Source(
+                    url="https://example.org/org-public.xml",
+                    kind="rss_feed",
+                    enabled=True,
+                    pending=False,
+                    organization_id=org_public.id,
+                ),
+            ]
+        )
+        db.session.commit()
+
+    person_resp = client.get("/people/p_public")
+    assert person_resp.status_code == 200
+    assert b"Affiliated organizations" in person_resp.data
+    assert b"/organizations/o_public" in person_resp.data
+
+    org_resp = client.get("/organizations/o_public")
+    assert org_resp.status_code == 200
+    assert b"Affiliated people" in org_resp.data
+    assert b"/people/p_public" in org_resp.data
+    assert b"/people/p_hidden" not in org_resp.data
+
+
+def test_public_home_latest_shows_rss_and_html_date_labels(app, client):
+    with app.app_context():
+        rss_src = Source(
+            url="https://example.org/rss.xml",
+            kind="rss_feed",
+            enabled=True,
+            pending=False,
+        )
+        html_src = Source(
+            url="https://example.org/page",
+            kind="html_page",
+            enabled=True,
+            pending=False,
+            last_poll_at=datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc),
+        )
+        db.session.add_all([rss_src, html_src])
+        db.session.flush()
+        db.session.add_all(
+            [
+                ContentItem(
+                    source_id=rss_src.id,
+                    external_id="rss:1",
+                    title="RSS story",
+                    link="https://example.org/articles/1",
+                    published_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+                ),
+                ContentItem(
+                    source_id=html_src.id,
+                    external_id="mainsha:abc",
+                    title="HTML page update",
+                    link="https://example.org/page",
+                    snippet="fresh",
+                ),
+            ]
+        )
+        db.session.commit()
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Published:" in resp.data
+    assert b"Last checked:" in resp.data
 
 
 def test_public_submit_and_duplicate(app, client):
@@ -379,4 +450,4 @@ def test_admin_login_redirect(client):
     )
     r = client.get("/admin/")
     assert r.status_code == 200
-    assert b"LLM:" in r.data
+    assert b"Ollama:" in r.data or b"OpenAI:" in r.data

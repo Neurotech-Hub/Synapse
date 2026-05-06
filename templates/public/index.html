@@ -1,4 +1,5 @@
 {% extends "public/layout.html" %}
+{% from "public/includes/card_macros.html" import latest_cards, reveal_script %}
 {% block title %}Synapse{% endblock %}
 {% block content %}
   <section class="hero-block">
@@ -6,10 +7,8 @@
     <p class="hero-sub">Quiet signal from the links that matter—labs, papers, pages.</p>
   </section>
 
-  <section class="composer-panel" aria-labelledby="composer-heading">
+  <section class="composer-panel" aria-label="Add source">
     <div class="composer-inner">
-      <h2 id="composer-heading" class="composer-heading">What’s worth ingesting?</h2>
-
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for cat, msg in messages %}
           <p role="status" class="flash flash-{{ cat }}">{{ msg }}</p>
@@ -53,67 +52,10 @@
       {% endif %}
     </div>
     {% if latest_groups %}
-      <div class="public-latest-cards">
-        {% for card in latest_groups %}
-          {% if card.kind == 'batch' %}
-            <article class="public-card public-card--batch public-card--reveal" style="--reveal-i: {{ loop.index0 }};">
-              <p class="public-card-kicker">{{ card.batch_items | length }} new from {{ (card.source.label or card.source.url) | truncate(52, True, '…') }}</p>
-              <ul class="public-card-batch-list" role="list">
-                {% for it in card.batch_items %}
-                  <li>
-                    {% if it.link %}
-                      <a href="{{ it.link }}" rel="noopener noreferrer" target="_blank">{{ it.public_latest_card_title }}</a>
-                    {% else %}
-                      {{ it.public_latest_card_title }}
-                    {% endif %}
-                  </li>
-                {% endfor %}
-              </ul>
-            </article>
-          {% else %}
-            {% set it = card.item %}
-            <article class="public-card public-card--reveal" style="--reveal-i: {{ loop.index0 }};">
-              <p class="public-card-kicker">via {{ (it.source.label or it.source.url) | truncate(52, True, '…') }}</p>
-              <h3 class="public-card-title">
-                {% if it.link %}
-                  <a href="{{ it.link }}" rel="noopener noreferrer" target="_blank">{{ it.public_latest_card_title }}</a>
-                {% else %}
-                  {{ it.public_latest_card_title }}
-                {% endif %}
-              </h3>
-              {% if it.public_latest_card_snippet %}
-                <p class="public-card-snippet">{{ it.public_latest_card_snippet | truncate(220, True, '…') }}</p>
-              {% endif %}
-            </article>
-          {% endif %}
-        {% endfor %}
-      </div>
+      {{ latest_cards(latest_groups) }}
     {% else %}
       <p class="public-muted public-latest-empty">Nothing to show yet—once approved sources ingest content, it will land here.</p>
     {% endif %}
   </section>
-  <script>
-    (function () {
-      var cards = document.querySelectorAll(".public-card--reveal");
-      if (!cards.length) return;
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        cards.forEach(function (el) {
-          el.classList.add("public-card--visible");
-        });
-        return;
-      }
-      if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("animation-timeline", "view()")) return;
-      var io = new IntersectionObserver(
-        function (entries) {
-          entries.forEach(function (e) {
-            if (e.isIntersecting) e.target.classList.add("public-card--visible");
-          });
-        },
-        { root: null, rootMargin: "0px 0px -12% 0px", threshold: 0.06 }
-      );
-      cards.forEach(function (c) {
-        io.observe(c);
-      });
-    })();
-  </script>
+  {{ reveal_script() }}
 {% endblock %}

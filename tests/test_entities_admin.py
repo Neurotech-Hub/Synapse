@@ -8,7 +8,6 @@ from werkzeug.datastructures import MultiDict
 from app import create_app
 from app.domain.entity_associations import sync_person_organizations
 from app.extensions import db
-from app.leads.pipeline_settings import get_singleton
 from app.models import Organization, Person, PersonaSnapshot, Source
 
 pytestmark = pytest.mark.usefixtures("_admin_env")
@@ -152,7 +151,7 @@ def test_people_list_hub_corpus_mark_for_member_person_owned_source(app, client)
         pid, sid = person.id, src.id
         sync_person_organizations(person=db.session.get(Person, pid), organization_ids_ordered=[hid])
         src.person_id = pid
-        get_singleton().hub_organization_id = hid
+        db.session.get(Organization, hid).is_hub = True
         db.session.commit()
 
     _login(client)
@@ -167,7 +166,7 @@ def test_organizations_list_shows_designated_hub_star(app, client):
         db.session.add(hub)
         db.session.commit()
         hid = hub.id
-        get_singleton().hub_organization_id = hid
+        hub.is_hub = True
         db.session.commit()
 
     _login(client)

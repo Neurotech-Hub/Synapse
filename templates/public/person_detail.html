@@ -1,47 +1,49 @@
 {% extends "public/layout.html" %}
+{% from "public/includes/card_macros.html" import latest_cards, reveal_script %}
 {% block title %}{{ person.display_name }}{% endblock %}
+{% block main_mod %} main-stack--entity{% endblock %}
 {% block content %}
   <article class="public-entity-page">
     <header class="public-entity-header">
       <h1 class="public-page-title">{{ person.display_name }}</h1>
       {% if persona and persona.build_status == 'ok' %}
-        <div class="public-persona-note" role="note">
-          <p class="public-persona-label">Snapshot summary (hub-generated, not a claim of fact)</p>
-          {% if persona.research_focus %}
-            <p><strong>Focus:</strong> {{ (persona.research_focus or [])[:8] | join('; ') }}{% if (persona.research_focus or [])|length > 8 %}…{% endif %}</p>
-          {% endif %}
-          {% if persona.keywords %}
-            <p class="public-keywords">{{ (persona.keywords or [])[:14] | join(' · ') }}</p>
-          {% endif %}
-        </div>
+        {% if persona.notes %}
+          <p class="public-persona-lead">{{ persona.notes }}</p>
+        {% endif %}
+        {% if persona.research_focus %}
+          <p class="public-focus">{{ (persona.research_focus or [])[:6] | join(' · ') }}{% if (persona.research_focus or [])|length > 6 %} · …{% endif %}</p>
+        {% endif %}
+        <p class="public-persona-disclaimer">Hub-generated snapshot — not a claim of fact.</p>
       {% endif %}
     </header>
 
-    <section class="public-section" aria-labelledby="digest-heading">
-      <h2 id="digest-heading" class="public-section-title">Recent activity</h2>
-      {% if digest and digest.summary_text %}
-        <div class="public-digest-body">{{ digest.summary_text | format_public_digest }}</div>
-      {% else %}
-        <p class="public-muted">No digest yet—our team can publish a summary from the admin Digest page.</p>
-      {% endif %}
-    </section>
-
-    {% if highlights %}
-      <section class="public-section" aria-labelledby="hl-heading">
-        <h2 id="hl-heading" class="public-section-title">Highlighted items</h2>
-        <ul class="public-latest-list" role="list">
-          {% for it in highlights %}
-            <li class="public-latest-item">
-              {% if it.link %}
-                <a href="{{ it.link }}" class="public-latest-link" rel="noopener noreferrer" target="_blank">{{ it.title or 'Untitled' }}</a>
-              {% else %}
-                <span class="public-latest-link">{{ it.title or 'Untitled' }}</span>
-              {% endif %}
-              <span class="public-latest-via">via {{ (it.source.label or it.source.url) | truncate(56, True, '…') }}</span>
-            </li>
-          {% endfor %}
-        </ul>
-      </section>
+    {% if affiliated_organizations %}
+      <aside class="public-entity-sidebar">
+        <section class="public-section" aria-labelledby="affiliated-organizations-heading">
+          <h2 id="affiliated-organizations-heading" class="public-section-title">Affiliated organizations</h2>
+          <ul class="public-latest-list" role="list">
+            {% for org in affiliated_organizations %}
+              <li class="public-latest-item">
+                <a href="{{ url_for('public.organization_detail', slug=org.slug) }}" class="public-latest-link">{{ org.display_name }}</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      </aside>
     {% endif %}
+
+    <main class="public-entity-main">
+      <section class="public-latest-section" aria-labelledby="latest-heading">
+        <div class="public-latest-head">
+          <h2 id="latest-heading" class="public-section-title public-section-title--home">Latest for {{ person.display_name }}</h2>
+        </div>
+        {% if latest_groups %}
+          {{ latest_cards(latest_groups) }}
+        {% else %}
+          <p class="public-muted public-latest-empty">No approved public items yet for this person.</p>
+        {% endif %}
+      </section>
+    </main>
   </article>
+  {{ reveal_script() }}
 {% endblock %}
