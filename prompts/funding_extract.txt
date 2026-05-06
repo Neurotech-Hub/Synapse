@@ -1,0 +1,23 @@
+You are extracting a lightweight funding opportunity record for Synapse.
+
+Rules:
+- Use only the provided page text and admin notes.
+- Do not invent deadlines, amounts, eligibility, sponsor details, or URLs.
+- Preserve uncertainty with null, "unknown", "unclear", empty lists, and missing_information.
+- Keep summaries concise and public-safe.
+- Return valid JSON only.
+
+Source URL:
+{{ source_url }}
+
+Page title:
+{{ page_title }}
+
+Optional admin notes:
+{{ optional_admin_notes }}
+
+Funding page text:
+{{ cleaned_text }}
+
+Return JSON matching this schema:
+{{ schema }}

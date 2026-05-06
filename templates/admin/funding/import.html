@@ -1,0 +1,63 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% import "admin/includes/form_macros.html" as fm %}
+{% block title %}Import funding CSV{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Import funding CSV</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_funding_import.html" %}{% endcall %}
+</header>
+
+<form method="post" enctype="multipart/form-data" class="admin-form">
+  {{ form.hidden_tag() }}
+  <div class="field-group">
+    {{ form.csv_file.label(class_="field-label") }}
+    {{ form.csv_file(class_="field-input") }}
+    {{ fm.field_errors(form.csv_file) }}
+  </div>
+  <div class="field-group">
+    <label class="field-label field-label-checkbox">{{ form.commit() }} {{ form.commit.label.text }}</label>
+  </div>
+  <div class="field-group">
+    <label class="field-label field-label-checkbox">{{ form.update_existing() }} {{ form.update_existing.label.text }}</label>
+  </div>
+  <div class="form-submit-row">{{ form.submit(class_="primary-btn") }}</div>
+</form>
+
+{% if summary %}
+<h2 class="source-view-h2">Import results</h2>
+<p>
+  Mode: <strong>{% if summary.dry_run %}dry run{% else %}commit{% endif %}</strong>.
+  Rows: {{ summary.total_rows }}.
+  Valid: {{ summary.valid_rows }}.
+  Created: {{ summary.created_count }}.
+  Updated: {{ summary.updated_count }}.
+  Errors: {{ summary.error_count }}.
+</p>
+<table class="tbl tbl-compact">
+  <thead>
+    <tr><th>Row</th><th>Title</th><th>Action</th><th>Messages</th></tr>
+  </thead>
+  <tbody>
+  {% for row in summary.results %}
+    <tr>
+      <td>{{ row.row_number }}</td>
+      <td>{{ row.title or "—" }}</td>
+      <td>{{ row.action }}</td>
+      <td>
+        {% if row.errors %}
+          {% for err in row.errors %}<div class="flash-error-text">{{ err }}</div>{% endfor %}
+        {% elif row.warnings %}
+          {% for warning in row.warnings %}<div>{{ warning }}</div>{% endfor %}
+        {% else %}
+          OK
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<p class="admin-form-foot"><a href="{{ url_for('admin.funding_list') }}" class="back-link">&larr; All funding</a></p>
+{% endblock %}

@@ -1,6 +1,6 @@
 # Agent Task Plan: Public Site, Funding, Ideas, Matching, and Lead Generation
 
-Status: Draft 1  
+Status: Reconciled after implementation phases 1-6  
 Owner: Neurotech Hub / Synapse maintainers  
 Related docs:
 
@@ -11,6 +11,97 @@ Related docs:
 - `docs/matching_and_leads.md`
 - `docs/public_site_ux.md`
 - `docs/prompt_specs.md`
+
+---
+
+## 0. Implementation reconciliation snapshot
+
+This document has been reconciled after the first execution pass through the phase plan. It should now be used as the forward-looking work packet list, not as a statement that all original draft tasks remain untouched.
+
+### Implemented in the current codebase
+
+The following work has landed:
+
+- `FundingOpportunity` model in `app/models.py`.
+- Funding migration: `migrations/versions/h1c2d3e4f5a6_funding_opportunity.py`.
+- Funding admin CRUD/import/review/archive routes in `app/web/admin/routes.py`.
+- Funding admin templates in `templates/admin/funding/`.
+- CSV import and validation in `app/funding/csv_import.py`.
+- Public funding visibility helper in `app/funding/public.py`.
+- Synthetic funding fixtures in `tests/fixtures/`.
+- Deterministic effort classifier in `app/funding/effort.py`.
+- `Idea` model in `app/models.py`.
+- Idea migration: `migrations/versions/i1d2e3f4a5b6_idea_model.py`.
+- Idea admin CRUD/review/archive routes and templates.
+- Public Ideas routes and templates.
+- `MatchRun`, `MatchEdge`, and `CollaborationHypothesis` models in `app/models.py`.
+- Matching migration: `migrations/versions/j1e2f3a4b5c6_matching_leads.py`.
+- Deterministic funding-to-idea matching in `app/matching/service.py`.
+- Admin Matching dashboard and review actions in `templates/admin/matching/`.
+- Public Funding Radar routes and templates.
+- Public-safe Idea/Funding cross-links from accepted public-safe match edges.
+- Prompt files for funding, ideas, matching, collaboration hypotheses, outreach, public summaries, and JSON repair.
+- Prompt registry and structured-output validation helpers in `app/llm/`.
+- Offline tests covering funding, effort, ideas, matching, public funding/ideas, prompt registry, and prompt validation.
+
+### Verified
+
+The latest full local test gate passed in the temporary test environment:
+
+```text
+164 passed, 1 skipped
+```
+
+Earlier phase-specific gates also verified fresh migration upgrades through the new funding, idea, matching, and collaboration hypothesis tables.
+
+### Important implementation decisions made
+
+- New ORM models were kept in `app/models.py`, matching the existing repository convention.
+- Domain helpers live in small packages such as `app/funding/`, `app/ideas/`, `app/matching/`, and `app/llm/`.
+- Admin routes remain in the existing `app/web/admin/routes.py` blueprint.
+- Public routes remain in `app/web/public_routes.py`.
+- Matching is deterministic-only so far. No live LLM scoring or synthesis is called by public or admin routes in this implementation pass.
+- Public routes only consume reviewed/public entities and accepted match edges with `public_safe` or `public` visibility.
+- Existing `LeadReport` behavior remains intact. `CollaborationHypothesis` is additive and private/admin-only.
+
+### Deferred or incomplete
+
+The following work remains for future agents:
+
+- URL fetch/extract workflow for funding pages.
+- LLM funding extraction and synthesis integration.
+- LLM effort classification integration.
+- Idea extraction from persona/content.
+- Idea duplicate detection and merge workflow.
+- Manual or generated Idea links to people, organizations, buildings/regions, and content items.
+- Person/org/building matching beyond funding-to-idea.
+- Hub-to-target matching.
+- LLM match rationale generation.
+- Rich collaboration hypothesis generation from target entities and accepted match sets.
+- LeadReport-to-CollaborationHypothesis compatibility actions.
+- Admin Settings UI for provider controls, call caps, thresholds, and feature flags.
+- `LLMRun` / cost / token logging table.
+- Public `/explore`, `/search`, `/places`, and request-support pages.
+- Homepage refresh with Ideas/Funding spotlight sections.
+
+### Current status by original agent packet
+
+| Original packet | Current status | Notes for next agent |
+|---|---|---|
+| Agent A — Funding Models and Migrations | Implemented | Model, migration, defaults, validation, fixtures, and tests exist. Future work is incremental schema additions only if URL fetch/synthesis requires them. |
+| Agent B — Funding Ingestion and Text Extraction | Partially implemented | CSV import is implemented. URL fetch/extract, safe HTML extraction, raw text hashing from fetched pages, and fetch tests remain. |
+| Agent C — Funding Synthesis and Effort Index | Partially implemented | Deterministic effort classifier is implemented. LLM funding extraction/synthesis and LLM effort classification remain. |
+| Agent D — Admin Funding UX | Implemented for manual/CSV MVP | Admin list/detail/edit/archive/import/review exists. Future admin work: fetch, synthesize, provider/cost settings, and richer review queues. |
+| Agent E — Ideas Model and Admin UX | Implemented for manual MVP | Idea model/admin/public MVP exists. Manual relationship editor, duplicate merge, and extraction review remain. |
+| Agent F — Idea Extraction from Personas and Content | Deferred | Prompt file and registry metadata exist, but no extraction service or admin review flow exists yet. |
+| Agent G — Matching Engine | Partially implemented | `MatchRun`/`MatchEdge` and deterministic funding-to-idea matching exist. Person/org/place matching, Hub-to-target matching, LLM rationale, and scheduled matching remain. |
+| Agent H — Collaboration Hypotheses | Partially implemented | Private model and simple hypothesis-from-match action exist. Full target-based hypothesis generation, LeadReport compatibility, and LLM synthesis remain. |
+| Agent I — Public Funding Pages | Implemented for MVP | Public Funding Radar and detail pages exist behind feature flag. Filters are minimal; related Ideas use accepted public-safe edges. |
+| Agent J — Public Ideas and Research Atlas UX | Partially implemented | Public Idea pages exist with related funding. `/explore`, places/atlas experience, homepage refresh, and richer related entity sections remain. |
+| Agent K — Prompt Registry, Provider Routing, and Cost Controls | Partially implemented | Prompt files, registry metadata, fingerprints, provider defaults, and JSON validation exist. Live provider integration and LLMRun/cost logging remain. |
+| Agent L — Search, Browse, and Discovery UI | Deferred | No `/search` or `/explore` page yet. |
+| Agent M — Tests, Fixtures, and Evaluation Harness | Partially implemented | Offline unit/route tests exist for implemented features. Prompt eval fixtures and live optional LLM evals remain. |
+| Agent N — Documentation and Developer Handoff | In progress | This reconciliation is the first handoff pass. README/admin operator docs still need update. |
 
 ---
 
@@ -122,42 +213,37 @@ Use product-facing language consistently:
 
 ### 3.2 Suggested package layout
 
-Agents may adjust to match the existing app structure, but the intended package layout is:
+The original draft suggested splitting models and route modules by domain. The current codebase kept the repository's existing conventions:
+
+- SQLAlchemy models live in `app/models.py`.
+- Admin routes live in `app/web/admin/routes.py`.
+- Public routes live in `app/web/public_routes.py`.
+- Domain-specific helper code lives in small packages.
+
+Current implemented helper layout:
 
 ```text
 app/funding/
   __init__.py
-  models.py
-  services.py
-  extract.py
-  synthesize.py
+  csv_import.py
   effort.py
-  routes_admin.py
-  routes_public.py
+  public.py
 
 app/ideas/
   __init__.py
-  models.py
-  services.py
-  routes_admin.py
-  routes_public.py
+  service.py
 
 app/matching/
   __init__.py
-  models.py
-  services.py
-  scoring.py
-  candidate_generation.py
-  routes_admin.py
+  service.py
 
-app/collaboration/
+app/llm/
   __init__.py
-  models.py
-  services.py
-  routes_admin.py
+  prompt_registry.py
+  validation.py
 ```
 
-If the existing app prefers fewer packages, keep the implementation idiomatic to the current codebase.
+Future agents should continue this pattern unless a file becomes too large to maintain safely.
 
 ### 3.3 Prompt naming
 
@@ -165,15 +251,23 @@ Prompt filenames should be stable and versionable:
 
 ```text
 prompts/funding_extract.txt
-prompts/funding_effort_index.txt
+prompts/funding_effort_classify.txt
+prompts/funding_public_card.txt
 prompts/idea_extract_from_persona.txt
-prompts/idea_match_entity.txt
+prompts/idea_synthesize_page.txt
 prompts/match_funding_to_entity.txt
 prompts/match_entity_to_idea.txt
+prompts/match_hub_to_target.txt
 prompts/collaboration_hypothesis.txt
+prompts/outreach_angle.txt
+prompts/lead_score_explain.txt
 prompts/public_entity_summary.txt
-prompts/public_funding_card.txt
+prompts/public_place_summary.txt
+prompts/public_research_atlas_blurb.txt
+prompts/json_repair.txt
 ```
+
+Prompt metadata and versions are registered in `app/llm/prompt_registry.py`.
 
 ### 3.4 Testing style
 
@@ -1390,6 +1484,8 @@ Agent L — Search and discovery
 
 ## Milestone 1 — Funding Foundation
 
+Status: **Partially complete**
+
 Agents:
 
 - A
@@ -1403,7 +1499,14 @@ Deliverable:
 
 - Admin can add a funding URL, fetch text, synthesize a public-safe funding card, classify effort, review, and publish/archive.
 
+Current reality:
+
+- Complete: funding model, migration, admin CRUD, CSV import, deterministic effort classifier, review/archive, tests.
+- Remaining: add funding URL fetch/extract and LLM synthesis/public-card generation.
+
 ## Milestone 2 — Public Funding Radar
+
+Status: **MVP complete**
 
 Agents:
 
@@ -1415,7 +1518,14 @@ Deliverable:
 
 - Public users can browse useful funding cards with effort index and external links.
 
+Current reality:
+
+- Complete: `/funding/`, `/funding/<slug>`, effort/status filters, public/private filtering, public-safe related Ideas, tests.
+- Remaining: richer filters, homepage spotlight, and design polish.
+
 ## Milestone 3 — Ideas Layer
+
+Status: **Manual/public MVP complete**
 
 Agents:
 
@@ -1428,7 +1538,14 @@ Deliverable:
 
 - Admin can create/review ideas; public users can explore public ideas.
 
+Current reality:
+
+- Complete: Idea model, migration, admin CRUD/review/archive, public Ideas index/detail, related public funding from match edges, tests.
+- Remaining: persona/content extraction, duplicate detection/merge, manual relationship editor, richer public related-entity sections.
+
 ## Milestone 4 — Matching Engine
+
+Status: **Foundation complete**
 
 Agents:
 
@@ -1440,7 +1557,14 @@ Deliverable:
 
 - Admin can generate and review match edges among funding, ideas, people, organizations, places, and Hub capabilities.
 
+Current reality:
+
+- Complete: `MatchRun`, `MatchEdge`, deterministic funding-to-idea generation, admin dashboard, review actions, tests.
+- Remaining: person/org/place/Hub matching, LLM rationale generation, scheduled/staleness handling.
+
 ## Milestone 5 — Collaboration Hypotheses
+
+Status: **Model/simple action complete**
 
 Agents:
 
@@ -1453,7 +1577,14 @@ Deliverable:
 
 - Admin can generate evidence-grounded collaboration hypotheses from selected matches.
 
+Current reality:
+
+- Complete: `CollaborationHypothesis` model and simple private hypothesis-from-funding-to-idea match action.
+- Remaining: target-based hypothesis generation, accepted-match aggregation, LeadReport compatibility, LLM synthesis, richer admin workflow.
+
 ## Milestone 6 — Research Atlas Public Experience
+
+Status: **Early MVP in progress**
 
 Agents:
 
@@ -1465,6 +1596,11 @@ Agents:
 Deliverable:
 
 - Public site feels exploratory, resourceful, and coherent across people, organizations, places, ideas, funding, and latest content.
+
+Current reality:
+
+- Complete: public Ideas and Funding Radar with public-safe cross-links.
+- Remaining: `/explore`, `/search`, places pages, homepage refresh, related chips/cards on people/org/place/latest, request-support page.
 
 ---
 

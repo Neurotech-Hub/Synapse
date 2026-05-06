@@ -1,0 +1,40 @@
+{% extends "public/layout.html" %}
+{% block title %}Search{% endblock %}
+{% block content %}
+  <section class="public-page-hero">
+    <h1 class="public-page-title">Search</h1>
+    <p class="public-page-lead">Search public people, organizations, Ideas, and Funding.</p>
+  </section>
+
+  <form method="get" class="public-filter-bar" aria-label="Search">
+    <label>
+      <span>Query</span>
+      <input name="q" value="{{ q }}" />
+    </label>
+    <button type="submit">Search</button>
+  </form>
+
+  {% if q %}
+    {% for heading, rows, endpoint in [
+      ("Ideas", ideas, "public.idea_detail"),
+      ("Funding", fundings, "public.funding_detail"),
+      ("People", people, "public.person_detail"),
+      ("Organizations", organizations, "public.organization_detail")
+    ] %}
+    <section class="public-section">
+      <h2 class="public-section-title">{{ heading }}</h2>
+      <ul class="public-latest-list" role="list">
+        {% for row in rows %}
+        <li class="public-latest-item">
+          <a class="public-latest-link" href="{{ url_for(endpoint, slug=row.slug) }}">{{ row.title if row.title is defined else row.display_name }}</a>
+        </li>
+        {% else %}
+        <li class="public-latest-item public-muted">No matching {{ heading|lower }}.</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endfor %}
+  {% else %}
+    <p class="public-empty">Enter a search term to explore public Synapse pages.</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,165 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% import "admin/includes/form_macros.html" as fm %}
+{% block title %}{% if funding %}Edit funding{% else %}New funding{% endif %}{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>{% if funding %}Edit{% else %}New{% endif %} funding opportunity</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_funding_form.html" %}{% endcall %}
+</header>
+
+<form method="post" class="admin-form">
+  {{ form.hidden_tag() }}
+
+  <div class="field-group">
+    {{ form.title.label(class_="field-label") }}
+    {{ form.title(class_="field-input field-input-prominent", size=72) }}
+    {{ fm.field_errors(form.title) }}
+  </div>
+
+  <div class="field-group">
+    {{ form.source_url.label(class_="field-label") }}
+    {{ form.source_url(class_="field-input", size=96) }}
+    {{ fm.field_errors(form.source_url) }}
+  </div>
+
+  <div class="field-group">
+    {{ form.external_id.label(class_="field-label") }}
+    {{ form.external_id(class_="field-input", size=48) }}
+    {{ fm.field_errors(form.external_id) }}
+  </div>
+
+  <div class="field-group">
+    {{ form.sponsor_name.label(class_="field-label") }}
+    {{ form.sponsor_name(class_="field-input", size=72) }}
+    {{ fm.field_errors(form.sponsor_name) }}
+  </div>
+
+  <div class="field-group">
+    {{ form.status.label(class_="field-label") }}
+    {{ form.status(class_="field-input") }}
+    {{ fm.field_errors(form.status) }}
+  </div>
+
+  <div class="field-group">
+    {{ form.source_type.label(class_="field-label") }}
+    {{ form.source_type(class_="field-input") }}
+    {{ fm.field_errors(form.source_type) }}
+  </div>
+
+  <div class="field-group">
+    <label class="field-label field-label-checkbox">{{ form.is_public() }} {{ form.is_public.label.text }}</label>
+    <p class="field-hint muted">Public records may be shown by later public funding pages. Keep private notes out of public fields.</p>
+  </div>
+
+  <div class="field-group">
+    <label class="field-label field-label-checkbox">{{ form.is_reviewed() }} {{ form.is_reviewed.label.text }}</label>
+  </div>
+
+  <h2 class="source-view-h2">Deadline and amount</h2>
+  <div class="field-group">
+    {{ form.deadline_date.label(class_="field-label") }}
+    {{ form.deadline_date(class_="field-input") }}
+    {{ fm.field_errors(form.deadline_date) }}
+  </div>
+  <div class="field-group">
+    {{ form.deadline_text.label(class_="field-label") }}
+    {{ form.deadline_text(class_="field-input", size=72) }}
+    {{ fm.field_errors(form.deadline_text) }}
+  </div>
+  <div class="field-group">
+    {{ form.amount_text.label(class_="field-label") }}
+    {{ form.amount_text(class_="field-input", size=72) }}
+    {{ fm.field_errors(form.amount_text) }}
+  </div>
+  <div class="field-group">
+    {{ form.amount_min.label(class_="field-label") }}
+    {{ form.amount_min(class_="field-input") }}
+    {{ fm.field_errors(form.amount_min) }}
+  </div>
+  <div class="field-group">
+    {{ form.amount_max.label(class_="field-label") }}
+    {{ form.amount_max(class_="field-input") }}
+    {{ fm.field_errors(form.amount_max) }}
+  </div>
+  <div class="field-group">
+    {{ form.mechanism.label(class_="field-label") }}
+    {{ form.mechanism(class_="field-input", size=72) }}
+    {{ fm.field_errors(form.mechanism) }}
+  </div>
+
+  <h2 class="source-view-h2">Effort and summaries</h2>
+  <div class="field-group">
+    {{ form.effort_index.label(class_="field-label") }}
+    {{ form.effort_index(class_="field-input") }}
+    {{ fm.field_errors(form.effort_index) }}
+  </div>
+  <div class="field-group">
+    {{ form.effort_score.label(class_="field-label") }}
+    {{ form.effort_score(class_="field-input") }}
+    {{ fm.field_errors(form.effort_score) }}
+  </div>
+  <div class="field-group">
+    {{ form.effort_rationale.label(class_="field-label") }}
+    {{ form.effort_rationale(class_="field-input field-input-multiline", rows=3, cols=72) }}
+    {{ fm.field_errors(form.effort_rationale) }}
+  </div>
+  <div class="field-group">
+    {{ form.summary_public.label(class_="field-label") }}
+    {{ form.summary_public(class_="field-input field-input-multiline", rows=4, cols=72) }}
+    {{ fm.field_errors(form.summary_public) }}
+  </div>
+  <div class="field-group">
+    {{ form.summary_private.label(class_="field-label") }}
+    {{ form.summary_private(class_="field-input field-input-multiline", rows=4, cols=72) }}
+    {{ fm.field_errors(form.summary_private) }}
+  </div>
+  <div class="field-group">
+    {{ form.eligibility_summary.label(class_="field-label") }}
+    {{ form.eligibility_summary(class_="field-input field-input-multiline", rows=3, cols=72) }}
+    {{ fm.field_errors(form.eligibility_summary) }}
+  </div>
+  <div class="field-group">
+    {{ form.notes_private.label(class_="field-label") }}
+    {{ form.notes_private(class_="field-input field-input-multiline", rows=3, cols=72) }}
+    {{ fm.field_errors(form.notes_private) }}
+  </div>
+
+  <h2 class="source-view-h2">Tags and raw notes</h2>
+  <div class="field-group">
+    {{ form.topic_tags.label(class_="field-label") }}
+    {{ form.topic_tags(class_="field-input", size=96) }}
+    <p class="field-hint muted">Separate tags with semicolons.</p>
+    {{ fm.field_errors(form.topic_tags) }}
+  </div>
+  <div class="field-group">
+    {{ form.method_tags.label(class_="field-label") }}
+    {{ form.method_tags(class_="field-input", size=96) }}
+    <p class="field-hint muted">Separate tags with semicolons.</p>
+    {{ fm.field_errors(form.method_tags) }}
+  </div>
+  <div class="field-group">
+    {{ form.raw_text.label(class_="field-label") }}
+    {{ form.raw_text(class_="field-input field-input-multiline", rows=8, cols=72) }}
+    {{ fm.field_errors(form.raw_text) }}
+  </div>
+
+  <div class="form-submit-row">
+    <div class="form-submit-primary-actions">
+      {{ form.submit(class_="primary-btn") }}
+      {% if funding %}
+      <button
+        type="submit"
+        class="danger-btn"
+        formaction="{{ url_for('admin.funding_archive', funding_id=funding.id) }}"
+        formmethod="post"
+        formnovalidate
+        onclick="return confirm('Archive this funding opportunity?');"
+      >Archive</button>
+      {% endif %}
+    </div>
+  </div>
+</form>
+
+<p class="admin-form-foot"><a href="{{ url_for('admin.funding_list') }}" class="back-link">&larr; All funding</a></p>
+{% endblock %}

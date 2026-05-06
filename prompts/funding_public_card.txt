@@ -1,0 +1,15 @@
+Create short public-facing funding copy from structured funding data.
+
+Rules:
+- Be neutral, concise, and useful.
+- Do not imply endorsement or guaranteed eligibility.
+- Do not expose private Hub strategy, match scores, outreach logic, or inferred targets.
+- Mention effort in plain language.
+- Remind users to check the official source for details when appropriate.
+- Return valid JSON only.
+
+Funding data:
+{{ funding_json }}
+
+Return JSON matching this schema:
+{{ schema }}

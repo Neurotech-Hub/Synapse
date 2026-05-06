@@ -1,0 +1,76 @@
+{% extends "public/layout.html" %}
+{% block title %}{{ funding.title }}{% endblock %}
+{% block main_mod %} main-stack--entity{% endblock %}
+{% block content %}
+  <article class="public-entity-page">
+    <header class="public-entity-header">
+      <p class="public-card-kicker">Funding · Effort: {{ (funding.effort_index or "unknown")|title }}</p>
+      <h1 class="public-page-title">{{ funding.title }}</h1>
+      {% if funding.summary_public %}
+      <p class="public-persona-lead">{{ funding.summary_public }}</p>
+      {% endif %}
+      {% if funding.topic_tags_json or funding.method_tags_json %}
+      <p class="public-focus">{{ ((funding.topic_tags_json or []) + (funding.method_tags_json or []))[:8] | join(" · ") }}</p>
+      {% endif %}
+    </header>
+
+    <main class="public-entity-main">
+      <section class="public-section">
+        <h2 class="public-section-title">Summary</h2>
+        <p>{{ funding.summary_public or funding.eligibility_summary or "Details are incomplete. Review the official funding page before making decisions." }}</p>
+      </section>
+
+      <section class="public-section">
+        <h2 class="public-section-title">Key details</h2>
+        <ul class="public-latest-list" role="list">
+          <li class="public-latest-item"><strong>Sponsor:</strong> {{ funding.sponsor_name or "Not listed" }}</li>
+          <li class="public-latest-item"><strong>Status:</strong> {{ funding.status|title }}</li>
+          <li class="public-latest-item"><strong>Deadline:</strong> {{ funding.deadline_date or funding.deadline_text or "Not listed" }}</li>
+          <li class="public-latest-item"><strong>Amount:</strong> {{ funding.amount_text or "Not listed" }}</li>
+          <li class="public-latest-item"><strong>Effort:</strong> {{ (funding.effort_index or "unknown")|title }} <span class="public-muted">Effort reflects likely application burden, not scientific value.</span></li>
+        </ul>
+      </section>
+
+      {% if funding.eligibility_summary %}
+      <section class="public-section">
+        <h2 class="public-section-title">Who should care</h2>
+        <p>{{ funding.eligibility_summary }}</p>
+      </section>
+      {% endif %}
+
+      {% if funding.source_url %}
+      <section class="public-section">
+        <h2 class="public-section-title">Source and caveats</h2>
+        <p>This summary is intended for discovery. Review the official funding page before making decisions.</p>
+        <p><a href="{{ funding.source_url }}" target="_blank" rel="noopener">Open official source</a></p>
+      </section>
+      {% endif %}
+
+      {% if related_ideas %}
+      <section class="public-section">
+        <h2 class="public-section-title">Relevant ideas</h2>
+        <div class="public-related-card-list">
+          {% for idea in related_ideas %}
+          <article class="public-related-card">
+            <p class="public-card-kicker">{{ idea.idea_type.replace("_", " ") }}</p>
+            <h3 class="public-card-title"><a href="{{ url_for('public.idea_detail', slug=idea.slug) }}">{{ idea.title }}</a></h3>
+            <p class="public-card-snippet">{{ idea.short_description or idea.public_summary or "A related public idea." }}</p>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+    </main>
+
+    <aside class="public-entity-sidebar">
+      <section class="public-section">
+        <h2 class="public-section-title">Funding Radar</h2>
+        <ul class="public-latest-list" role="list">
+          <li class="public-latest-item">Effort: {{ (funding.effort_index or "unknown")|title }}</li>
+          {% if funding.mechanism %}<li class="public-latest-item">Mechanism: {{ funding.mechanism }}</li>{% endif %}
+          {% if funding.amount_text %}<li class="public-latest-item">{{ funding.amount_text }}</li>{% endif %}
+        </ul>
+      </section>
+    </aside>
+  </article>
+{% endblock %}

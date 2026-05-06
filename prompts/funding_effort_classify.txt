@@ -1,0 +1,26 @@
+Classify the likely application effort for this funding opportunity.
+
+Effort labels:
+- mild: small pilot, simple internal application, short proposal, small budget, limited coordination.
+- moderate: standard foundation or pilot-style proposal, moderate budget, some narrative and budget work.
+- heavy: major NIH/NSF-scale, center-scale, multi-investigator, complex budget, institutional approvals, large award.
+- unknown: not enough information.
+
+Rules:
+- Effort is not strategic value.
+- A heavy opportunity can still be valuable.
+- Consider amount, mechanism, duration, collaboration requirements, institutional requirements, and application complexity.
+- Do not invent requirements.
+- Return valid JSON only.
+
+Heuristic guess:
+{{ heuristic_effort_guess }}
+
+Heuristic rationale:
+{{ heuristic_rationale }}
+
+Funding extraction:
+{{ funding_extraction_json }}
+
+Return JSON matching this schema:
+{{ schema }}

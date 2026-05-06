@@ -1,0 +1,17 @@
+Create a short public-facing place summary for the research atlas.
+
+Rules:
+- Explain what happens here using public evidence.
+- Mention organizations, methods, or themes only when provided.
+- Do not expose private lead logic.
+- Avoid unsupported claims.
+- Return valid JSON only.
+
+Place snapshot:
+{{ place_snapshot }}
+
+Related public entities:
+{{ related_entities_json }}
+
+Return JSON matching this schema:
+{{ schema }}

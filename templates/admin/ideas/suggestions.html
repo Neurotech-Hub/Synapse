@@ -1,0 +1,100 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}Idea suggestions{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Idea suggestions</h1>
+  {% call syn_help.tips_bubble() %}
+  <section class="admin-tip-sec">
+    <h3 class="admin-tip-h">Review first</h3>
+    <p class="admin-tip-p">Generated suggestions are private until accepted as Ideas and explicitly reviewed/published.</p>
+  </section>
+  {% endcall %}
+</header>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Generate from persona</h2>
+  <form method="post" action="" class="inline-form" onsubmit="this.action='{{ url_for('admin.ideas_suggestions_generate_persona', snapshot_id=0) }}'.replace('/0', '/' + this.elements.snapshot_id.value);">
+    <select name="snapshot_id" class="field-input">
+      {% for snapshot in personas %}
+      <option value="{{ snapshot.id }}">Snapshot #{{ snapshot.id }} · {{ snapshot.build_status }}</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="primary-btn-inline" {% if not personas %}disabled{% endif %}>Generate suggestions</button>
+  </form>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Generate from content item</h2>
+  <form method="post" action="" class="inline-form" onsubmit="this.action='{{ url_for('admin.ideas_suggestions_generate_content_item', content_item_id=0) }}'.replace('/0', '/' + this.elements.content_item_id.value);">
+    <select name="content_item_id" class="field-input">
+      {% for item in content_items %}
+      <option value="{{ item.id }}">{{ item.id }} · {{ (item.title or item.link or item.external_id or "Untitled")[:100] }}</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="primary-btn-inline" {% if not content_items %}disabled{% endif %}>Generate from item</button>
+  </form>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Suggestions</h2>
+  <form method="get" class="admin-form list-controls">
+    <label class="field-label" for="status">Status</label>
+    <select class="field-input" id="status" name="status">
+      {% for value in ["pending", "accepted", "rejected", "merged"] %}
+      <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ value }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="primary-btn-inline">Filter</button>
+  </form>
+  <table class="tbl tbl-compact">
+    <thead><tr><th>Title</th><th>Source evidence</th><th>Confidence</th><th>Duplicate?</th><th class="tbl-actions-col"></th></tr></thead>
+    <tbody>
+    {% for suggestion in suggestions %}
+      <tr>
+        <td>{{ suggestion.title }}<br/><span class="muted">{{ suggestion.short_description or "" }}</span></td>
+        <td>
+          {{ suggestion.source_type }} #{{ suggestion.source_id }}
+          {% if suggestion.evidence_json %}
+          <details>
+            <summary>Evidence</summary>
+            <ul>
+              {% for evidence in suggestion.evidence_json %}
+              <li>{{ evidence }}</li>
+              {% endfor %}
+            </ul>
+          </details>
+          {% endif %}
+          {% if suggestion.llm_run %}
+          <div class="muted">LLM: {{ suggestion.llm_run.provider }}{% if suggestion.llm_run.model_name %} · {{ suggestion.llm_run.model_name }}{% endif %} · {{ suggestion.llm_run.status }}</div>
+          {% endif %}
+        </td>
+        <td>{% if suggestion.confidence is not none %}{{ suggestion.confidence | round(2) }}{% else %}—{% endif %}</td>
+        <td>
+          {% if suggestion.duplicate_candidate %}{{ suggestion.duplicate_candidate.title }}{% else %}—{% endif %}
+          {% if suggestion.duplicate_reason %}<div class="muted">{{ suggestion.duplicate_reason }}{% if suggestion.duplicate_confidence is not none %} · {{ suggestion.duplicate_confidence|round(2) }}{% endif %}</div>{% endif %}
+        </td>
+        <td class="tbl-actions">
+          {% if suggestion.status == "pending" %}
+          <form method="post" action="{{ url_for('admin.ideas_suggestion_action', suggestion_id=suggestion.id, action='accept') }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="linkish">Accept</button>
+          </form>
+          <form method="post" action="{{ url_for('admin.ideas_suggestion_action', suggestion_id=suggestion.id, action='reject') }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="linkish">Reject</button>
+          </form>
+          {% else %}
+          {{ suggestion.status }}
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="tbl-empty muted">No suggestions.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

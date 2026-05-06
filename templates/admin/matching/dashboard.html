@@ -1,0 +1,200 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}Matching{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Matching</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_matching_dashboard.html" %}{% endcall %}
+</header>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Generate matches</h2>
+  <div class="form-submit-row">
+    <form method="post" action="" class="inline-form" onsubmit="this.action='{{ url_for('admin.matching_generate_funding', funding_id=0) }}'.replace('/0', '/' + this.elements.funding_id.value);">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <select name="funding_id" class="field-input">
+        {% for funding in funding_rows %}
+        <option value="{{ funding.id }}">{{ funding.title }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="primary-btn-inline" {% if not funding_rows %}disabled{% endif %}>Generate for funding</button>
+    </form>
+    <form method="post" action="" class="inline-form" onsubmit="this.action='{{ url_for('admin.matching_generate_idea', idea_id=0) }}'.replace('/0', '/' + this.elements.idea_id.value);">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <select name="idea_id" class="field-input">
+        {% for idea in idea_rows %}
+        <option value="{{ idea.id }}">{{ idea.title }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="primary-btn-inline" {% if not idea_rows %}disabled{% endif %}>Generate for idea</button>
+    </form>
+    <form method="post" action="" class="inline-form" onsubmit="this.action='{{ url_for('admin.matching_generate_person', person_id=0) }}'.replace('/0', '/' + this.elements.person_id.value);">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <select name="person_id" class="field-input">
+        {% for person in person_rows %}
+        <option value="{{ person.id }}">{{ person.display_name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="primary-btn-inline" {% if not person_rows %}disabled{% endif %}>Generate for person</button>
+    </form>
+    <form method="post" action="" class="inline-form" onsubmit="this.action='{{ url_for('admin.matching_generate_organization', organization_id=0) }}'.replace('/0', '/' + this.elements.organization_id.value);">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <select name="organization_id" class="field-input">
+        {% for org in organization_rows %}
+        <option value="{{ org.id }}">{{ org.display_name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="primary-btn-inline" {% if not organization_rows %}disabled{% endif %}>Generate for org</button>
+    </form>
+  </div>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Manual relationship</h2>
+  <form method="post" action="{{ url_for('admin.matching_manual_edge') }}" class="admin-form list-controls">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <label class="field-label" for="manual-source-type">Source</label>
+    <select class="field-input" id="manual-source-type" name="source_type">
+      <option value="idea">Idea</option>
+      <option value="funding">Funding</option>
+      <option value="person">Person</option>
+      <option value="organization">Organization</option>
+    </select>
+    <select class="field-input" name="source_id">
+      {% for kind, options in entity_options.items() %}
+        {% for option in options %}
+        <option value="{{ option.id }}">{{ kind }} · {{ option.label }}</option>
+        {% endfor %}
+      {% endfor %}
+    </select>
+    <label class="field-label" for="manual-target-type">Target</label>
+    <select class="field-input" id="manual-target-type" name="target_type">
+      <option value="idea">Idea</option>
+      <option value="funding">Funding</option>
+      <option value="person">Person</option>
+      <option value="organization">Organization</option>
+    </select>
+    <select class="field-input" name="target_id">
+      {% for kind, options in entity_options.items() %}
+        {% for option in options %}
+        <option value="{{ option.id }}">{{ kind }} · {{ option.label }}</option>
+        {% endfor %}
+      {% endfor %}
+    </select>
+    <select class="field-input" name="visibility">
+      <option value="private">private</option>
+      <option value="public_safe">public_safe</option>
+    </select>
+    <input class="field-input" name="rationale" placeholder="private note/rationale"/>
+    <button type="submit" class="primary-btn-inline">Save relationship</button>
+  </form>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Generate target hypothesis</h2>
+  <form method="post" action="{{ url_for('admin.matching_generate_target_hypothesis') }}" class="admin-form list-controls">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <select class="field-input" name="target_type">
+      <option value="person">person</option>
+      <option value="organization">organization</option>
+      <option value="idea">idea</option>
+      <option value="funding">funding</option>
+    </select>
+    <input class="field-input" name="target_id" placeholder="target id"/>
+    <button type="submit" class="primary-btn-inline">Generate hypothesis</button>
+  </form>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Match edges</h2>
+  <form method="get" class="admin-form list-controls">
+    <label class="field-label" for="status">Status</label>
+    <select class="field-input" id="status" name="status">
+      <option value="">Any</option>
+      {% for value in ["needs_review", "accepted", "rejected", "archived", "stale"] %}
+      <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ value }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="primary-btn-inline">Filter</button>
+  </form>
+  <table class="tbl tbl-compact">
+    <thead>
+      <tr><th>Type</th><th>Source</th><th>Target</th><th>Score</th><th>Status</th><th>Visibility</th><th class="tbl-actions-col"></th></tr>
+    </thead>
+    <tbody>
+    {% for edge in edges %}
+      {% set labels = edge_labels.get(edge.id, ("source", "target")) %}
+      <tr>
+        <td>{{ edge.match_type }}</td>
+        <td>{{ labels[0] }}</td>
+        <td>{{ labels[1] }}</td>
+        <td>{% if edge.score_total is not none %}{{ edge.score_total | round(2) }}{% else %}—{% endif %}</td>
+        <td>{{ edge.status }}</td>
+        <td>{{ edge.visibility }}</td>
+        <td class="tbl-actions">
+          <div class="tbl-actions-inner">
+            <a href="{{ url_for('admin.matching_edge_detail', edge_id=edge.id) }}">View</a>
+            <form method="post" action="{{ url_for('admin.matching_edge_action', edge_id=edge.id, action='accept') }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="linkish">Accept</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.matching_edge_action', edge_id=edge.id, action='reject') }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="linkish">Reject</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.matching_create_hypothesis', edge_id=edge.id) }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="linkish">Hypothesis</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="tbl-empty muted">No match edges yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Recent match runs</h2>
+  <table class="tbl tbl-compact">
+    <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Candidates</th><th>Scored</th><th>Created</th></tr></thead>
+    <tbody>
+    {% for run in runs %}
+      <tr>
+        <td>{{ run.id }}</td>
+        <td>{{ run.run_type }}</td>
+        <td>{{ run.status }}</td>
+        <td>{{ run.candidates_count }}</td>
+        <td>{{ run.scored_count }}</td>
+        <td>{{ run.created_at|local_dt("datetime") }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="tbl-empty muted">No match runs yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Collaboration hypotheses</h2>
+  <table class="tbl tbl-compact">
+    <thead><tr><th>Title</th><th>Target</th><th>Status</th><th>Priority</th><th>Score</th><th class="tbl-actions-col"></th></tr></thead>
+    <tbody>
+    {% for hyp in hypotheses %}
+      <tr>
+        <td>{{ hyp.title }}</td>
+        <td>{{ hypothesis_labels.get(hyp.id, "—") }}</td>
+        <td>{{ hyp.status }}</td>
+        <td>{{ hyp.priority }}</td>
+        <td>{% if hyp.score_total is not none %}{{ hyp.score_total | round(2) }}{% else %}—{% endif %}</td>
+        <td class="tbl-actions"><a href="{{ url_for('admin.matching_hypothesis_detail', hypothesis_id=hyp.id) }}">View</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="tbl-empty muted">No hypotheses yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

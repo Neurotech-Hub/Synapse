@@ -4,7 +4,13 @@
 {% block body %}
 <header class="page-head">
   <h1>Edit content item {{ item.id }}</h1>
-  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_item_edit.html" %}{% endcall %}
+  <div class="page-head-actions">
+    <form method="post" action="{{ url_for('admin.ideas_suggestions_generate_content_item', content_item_id=item.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="primary-btn-inline">Generate Idea suggestions</button>
+    </form>
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_item_edit.html" %}{% endcall %}
+  </div>
 </header>
 <p class="muted contextual-note">
   {% if item.source %}

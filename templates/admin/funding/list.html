@@ -1,0 +1,72 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}Funding{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Funding</h1>
+  <div class="page-head-actions">
+    <a href="{{ url_for('admin.funding_import') }}" class="primary-btn-inline">Import CSV</a>
+    <a href="{{ url_for('admin.funding_new') }}" class="primary-btn-inline">New funding</a>
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_funding_list.html" %}{% endcall %}
+  </div>
+</header>
+
+<form method="get" class="admin-form list-controls">
+  <label class="field-label" for="status">Status</label>
+  <select class="field-input" id="status" name="status">
+    <option value="">Any</option>
+    {% for value in ["draft", "active", "expired", "archived"] %}
+    <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ value }}</option>
+    {% endfor %}
+  </select>
+  <label class="field-label" for="effort_index">Effort</label>
+  <select class="field-input" id="effort_index" name="effort_index">
+    <option value="">Any</option>
+    {% for value in ["unknown", "mild", "moderate", "heavy"] %}
+    <option value="{{ value }}" {% if selected_effort == value %}selected{% endif %}>{{ value }}</option>
+    {% endfor %}
+  </select>
+  <label class="field-label" for="visibility">Visibility</label>
+  <select class="field-input" id="visibility" name="visibility">
+    <option value="">Any</option>
+    <option value="public" {% if selected_visibility == "public" %}selected{% endif %}>public</option>
+    <option value="private" {% if selected_visibility == "private" %}selected{% endif %}>private</option>
+  </select>
+  <button type="submit" class="primary-btn-inline">Filter</button>
+</form>
+
+<table class="tbl tbl-compact">
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Sponsor</th>
+      <th>Deadline</th>
+      <th>Amount</th>
+      <th>Effort</th>
+      <th>Confidence</th>
+      <th>Status</th>
+      <th>Public?</th>
+      <th>Updated</th>
+      <th class="tbl-actions-col"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for f in rows %}
+    <tr>
+      <td><a href="{{ url_for('admin.funding_detail', funding_id=f.id) }}">{{ f.title }}</a></td>
+      <td>{{ f.sponsor_name or "—" }}</td>
+      <td>{{ f.deadline_date or f.deadline_text or "—" }}</td>
+      <td>{{ f.amount_text or "—" }}</td>
+      <td><span class="badge badge-muted">{{ f.effort_index }}</span></td>
+      <td>{% if f.effort_confidence is not none %}{{ (f.effort_confidence * 100) | round | int }}%{% else %}—{% endif %}</td>
+      <td>{{ f.status }}</td>
+      <td>{% if f.is_public %}yes{% else %}no{% endif %}</td>
+      <td>{{ f.updated_at|local_dt("date") }}</td>
+      <td class="tbl-actions"><a href="{{ url_for('admin.funding_edit', funding_id=f.id) }}">Edit</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="10" class="tbl-empty muted">No funding opportunities.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

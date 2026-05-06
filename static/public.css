@@ -433,6 +433,56 @@ body.public {
   color: var(--text);
 }
 
+.public-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.public-filter-bar label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.public-filter-bar select,
+.public-filter-bar input,
+.public-filter-bar button {
+  font: inherit;
+  min-height: 2.35rem;
+  border-radius: 12px;
+  border: 1px solid var(--stroke-strong);
+}
+
+.public-filter-bar select {
+  padding: 0.35rem 0.65rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+}
+
+.public-filter-bar input {
+  padding: 0.35rem 0.65rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+}
+
+.public-filter-bar button {
+  padding: 0.35rem 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+}
+
 .public-latest-cards {
   display: flex;
   flex-direction: column;
@@ -533,6 +583,24 @@ body.public {
   font-size: 0.8rem;
   color: var(--text-faint);
   letter-spacing: 0.01em;
+}
+
+.public-card-tags {
+  margin: 0.65rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.public-related-card-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.public-related-card {
+  padding: 1rem;
+  border: 1px solid var(--stroke);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .public-card-batch-list {

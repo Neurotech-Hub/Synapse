@@ -1,0 +1,36 @@
+{% extends "public/layout.html" %}
+{% block title %}Explore{% endblock %}
+{% block content %}
+  <section class="public-page-hero">
+    <h1 class="public-page-title">Explore</h1>
+    <p class="public-page-lead">Browse public Ideas, Funding, people, and organizations in the Synapse research atlas.</p>
+  </section>
+
+  {% for heading, rows, endpoint in [
+    ("Ideas", ideas, "public.idea_detail"),
+    ("Funding", fundings, "public.funding_detail"),
+    ("People", people, "public.person_detail"),
+    ("Organizations", organizations, "public.organization_detail")
+  ] %}
+  <section class="public-section">
+    <h2 class="public-section-title">{{ heading }}</h2>
+    <div class="public-related-card-list">
+      {% for row in rows %}
+      <article class="public-related-card">
+        <p class="public-card-kicker">{{ heading[:-1] if heading.endswith("s") else heading }}</p>
+        <h3 class="public-card-title"><a href="{{ url_for(endpoint, slug=row.slug) }}">{{ row.title if row.title is defined else row.display_name }}</a></h3>
+        {% if row.short_description is defined and row.short_description %}
+        <p class="public-card-snippet">{{ row.short_description }}</p>
+        {% elif row.summary_public is defined and row.summary_public %}
+        <p class="public-card-snippet">{{ row.summary_public }}</p>
+        {% elif row.notes is defined and row.notes %}
+        <p class="public-card-snippet">{{ row.notes }}</p>
+        {% endif %}
+      </article>
+      {% else %}
+      <p class="public-empty">No public {{ heading|lower }} yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+{% endblock %}

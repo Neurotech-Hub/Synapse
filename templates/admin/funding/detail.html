@@ -1,0 +1,273 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}Funding detail{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>{{ funding.title }}</h1>
+  <div class="page-head-actions">
+    <a href="{{ url_for('admin.funding_edit', funding_id=funding.id) }}" class="primary-btn-inline">Edit</a>
+    {% call syn_help.tips_bubble() %}{% include "admin/includes/help_funding_detail.html" %}{% endcall %}
+  </div>
+</header>
+
+<p class="contextual-note">
+  <span class="badge badge-muted">{{ funding.status }}</span>
+  {% if funding.is_public %}<span class="badge ok">Public</span>{% else %}<span class="badge badge-muted">Private</span>{% endif %}
+  {% if funding.is_reviewed %}<span class="badge ok">Reviewed</span>{% else %}<span class="badge bad">Needs review</span>{% endif %}
+  {% if funding.synthesis_status in ("needs_review", "failed") %}<span class="badge badge-muted">LLM generated</span>{% endif %}
+</p>
+
+{% set funding_stage = "Published" if funding.is_public and funding.is_reviewed and funding.status == "active" else ("Archived" if funding.status == "archived" else ("Needs source" if not funding.raw_text else ("Needs review" if funding.synthesized_json else ("Ready to publish" if funding.is_reviewed and not funding.is_public else "Needs draft")))) %}
+<section class="source-view-section admin-status-card">
+  <div>
+    <p class="admin-preview-card-kicker">Funding workflow</p>
+    <h2 class="source-view-h2">{{ funding_stage }}</h2>
+    <p class="muted">Can this opportunity become a useful public card or lead-generation signal?</p>
+  </div>
+  <div class="form-submit-row">
+    {% if not funding.raw_text %}
+    <form method="post" action="{{ url_for('admin.funding_fetch_source', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="primary-btn">Read from source link</button>
+    </form>
+    <a href="{{ url_for('admin.funding_edit', funding_id=funding.id) }}" class="primary-btn-inline">Edit manually</a>
+    {% elif not funding.synthesized_json %}
+    <form method="post" action="{{ url_for('admin.funding_synthesize', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="primary-btn">Create review draft</button>
+    </form>
+    <a href="{{ url_for('admin.funding_edit', funding_id=funding.id) }}" class="primary-btn-inline">Edit manually</a>
+    {% elif not funding.is_reviewed %}
+    <a href="#synthesis-review" class="primary-btn">Review draft</a>
+    <form method="post" action="{{ url_for('admin.funding_discard_synthesis', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="secondary-btn-inline">Discard draft</button>
+    </form>
+    {% elif funding.is_reviewed and not funding.is_public %}
+    <form method="post" action="{{ url_for('admin.funding_review', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="primary-btn">Mark ready</button>
+    </form>
+    <a href="{{ url_for('public.funding_detail', slug=funding.slug) }}" target="_blank" rel="noopener" class="primary-btn-inline">Preview public card</a>
+    {% else %}
+    <a href="{{ url_for('public.funding_detail', slug=funding.slug) }}" target="_blank" rel="noopener" class="primary-btn">Preview public page</a>
+    <a href="{{ url_for('admin.matching_dashboard') }}" class="primary-btn-inline">Review relationships</a>
+    {% endif %}
+  </div>
+</section>
+
+<table class="tbl tbl-compact">
+  <tbody>
+    <tr><th>Slug</th><td class="mono">{{ funding.slug }}</td></tr>
+    <tr><th>External ID</th><td>{{ funding.external_id or "—" }}</td></tr>
+    <tr><th>Sponsor</th><td>{{ funding.sponsor_name or "—" }}</td></tr>
+    <tr>
+      <th>Source</th>
+      <td>
+        {% if funding.source_url %}
+        <a href="{{ funding.source_url }}" target="_blank" rel="noopener">{{ funding.source_url }}</a>
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    <tr><th>Deadline</th><td>{{ funding.deadline_date or funding.deadline_text or "—" }}</td></tr>
+    <tr><th>Amount</th><td>{{ funding.amount_text or "—" }}</td></tr>
+    <tr><th>Mechanism</th><td>{{ funding.mechanism or "—" }}</td></tr>
+    <tr>
+      <th>Effort</th>
+      <td>
+        <span class="badge badge-muted">{{ funding.effort_index }}</span>
+        {% if funding.effort_score is not none %} score {{ funding.effort_score | round(2) }}{% endif %}
+        {% if funding.effort_confidence is not none %} · confidence {{ (funding.effort_confidence * 100) | round | int }}%{% endif %}
+        {% if funding.effort_reviewed_at %} · reviewed {{ funding.effort_reviewed_at|local_dt("date") }}{% endif %}
+      </td>
+    </tr>
+    <tr><th>Topic tags</th><td>{{ (funding.topic_tags_json or []) | join("; ") or "—" }}</td></tr>
+    <tr><th>Method tags</th><td>{{ (funding.method_tags_json or []) | join("; ") or "—" }}</td></tr>
+    <tr>
+      <th>Fetch</th>
+      <td>
+        {% if funding.fetched_at %}
+          {{ funding.fetched_at|local_dt("datetime") }}
+          {% if funding.source_url_final %} · final: <a href="{{ funding.source_url_final }}" target="_blank" rel="noopener">{{ funding.source_url_final }}</a>{% endif %}
+          {% if funding.fetch_status_code %} · HTTP {{ funding.fetch_status_code }}{% endif %}
+          {% if funding.fetch_content_type %} · {{ funding.fetch_content_type }}{% endif %}
+          {% if funding.source_text_chars %} · {{ funding.source_text_chars }} chars{% endif %}
+          {% if funding.raw_text_hash %} · <span class="mono">{{ funding.raw_text_hash[:12] }}</span>{% endif %}
+        {% elif funding.fetch_error %}
+          <span class="badge bad">failed</span> {{ funding.fetch_error }}
+        {% else %}
+          —
+        {% endif %}
+      </td>
+    </tr>
+    <tr><th>Updated</th><td>{{ funding.updated_at|local_dt }}</td></tr>
+  </tbody>
+</table>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Review fields</h2>
+  <details open>
+    <summary>Public summary</summary>
+    <p>{{ funding.summary_public or "No public summary yet." }}</p>
+  </details>
+  <details>
+    <summary>Eligibility</summary>
+    <p>{{ funding.eligibility_summary or "No eligibility summary yet." }}</p>
+  </details>
+  <details>
+    <summary>Private summary</summary>
+    <p>{{ funding.summary_private or "No private summary yet." }}</p>
+  </details>
+</section>
+
+{% if funding.effort_rationale %}
+<section class="source-view-section">
+  <h2 class="source-view-h2">Effort</h2>
+  <details open>
+    <summary>Rationale</summary>
+    <p>{{ funding.effort_rationale }}</p>
+  </details>
+</section>
+{% endif %}
+
+{% if funding.effort_signals_json %}
+<details>
+  <summary>Effort signals</summary>
+  <ul>
+    {% for signal in funding.effort_signals_json %}
+    <li>{{ signal }}</li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+{% if funding.notes_private %}
+<h2 class="source-view-h2">Private notes</h2>
+<p>{{ funding.notes_private }}</p>
+{% endif %}
+
+{% if funding.raw_text %}
+<details>
+  <summary>Raw imported text</summary>
+  <pre class="mono">{{ funding.raw_text }}</pre>
+</details>
+{% endif %}
+
+<details class="source-view-section">
+  <summary>Advanced Tools</summary>
+  <div class="form-submit-row">
+    <form method="post" action="{{ url_for('admin.funding_review', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="next" value="{{ request.path }}"/>
+      <button type="submit" class="primary-btn-inline">Mark reviewed</button>
+    </form>
+    <form method="post" action="{{ url_for('admin.funding_effort_rebuild', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="next" value="{{ request.path }}"/>
+      <button type="submit" class="primary-btn-inline">Recalculate effort</button>
+    </form>
+    <form method="post" action="{{ url_for('admin.funding_fetch_source', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="next" value="{{ request.path }}"/>
+      <button type="submit" class="primary-btn-inline" {% if not funding.source_url %}disabled{% endif %}>Read from source link</button>
+    </form>
+    <form method="post" action="{{ url_for('admin.funding_synthesize', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="primary-btn-inline" {% if not funding.raw_text %}disabled{% endif %}>Create review draft</button>
+    </form>
+    <form method="post" action="{{ url_for('admin.funding_regenerate_public_card', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="primary-btn-inline">Rewrite public summary</button>
+    </form>
+    <form method="post" action="{{ url_for('admin.matching_generate_funding', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="next" value="{{ request.path }}"/>
+      <button type="submit" class="primary-btn-inline">Find related Ideas and people</button>
+    </form>
+    <form method="post" action="{{ url_for('admin.funding_archive', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="danger-btn" onclick="return confirm('Archive this funding opportunity?');">Archive</button>
+    </form>
+  </div>
+</details>
+
+{% if funding.fetch_error %}
+<form method="post" action="{{ url_for('admin.funding_clear_fetch_error', funding_id=funding.id) }}" class="inline-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+  <button type="submit" class="linkish">Clear fetch error</button>
+</form>
+{% endif %}
+
+{% if latest_llm_run %}
+<p class="contextual-note">
+  Latest LLM run: <strong>{{ latest_llm_run.status }}</strong> · {{ latest_llm_run.prompt_name }}
+  {% if latest_llm_run.error_message %} · {{ latest_llm_run.error_message }}{% endif %}
+  {% if latest_llm_run.validation_errors_json %} · {{ latest_llm_run.validation_errors_json | join("; ") }}{% endif %}
+</p>
+{% endif %}
+
+{% if funding.synthesized_json %}
+<section class="source-view-section" id="synthesis-review">
+  <h2 class="source-view-h2">Synthesis review</h2>
+  <details open>
+    <summary>Current vs draft fields</summary>
+    <form method="post" action="{{ url_for('admin.funding_apply_synthesis', funding_id=funding.id) }}" class="admin-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <table class="tbl tbl-compact">
+        <thead><tr><th>Apply</th><th>Field</th><th>Status</th><th>Current</th><th>Draft</th></tr></thead>
+        <tbody>
+        {% for row in synthesis_diffs %}
+          <tr>
+            <td>{% if row.can_apply %}<input type="checkbox" name="fields" value="{{ row.field }}"/>{% else %}—{% endif %}</td>
+            <td>{{ row.label }}</td>
+            <td>
+              <span class="badge badge-muted">{{ row.status }}</span>
+              {% if row.is_manual %}<span class="badge ok">current value</span>{% endif %}
+            </td>
+            <td>{{ row.current_value if row.current_value not in (none, [], {}) else "—" }}</td>
+            <td>{{ row.draft_value if row.draft_value not in (none, [], {}) else "—" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="form-submit-row">
+        <button type="submit" class="primary-btn-inline">Apply selected fields</button>
+      </div>
+    </form>
+  </details>
+  <div class="form-submit-row">
+    <form method="post" action="{{ url_for('admin.funding_effort_from_synthesis', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="primary-btn-inline">Use draft effort</button>
+    </form>
+    <form method="post" action="{{ url_for('admin.funding_discard_synthesis', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="danger-btn">Discard draft</button>
+    </form>
+  </div>
+  {% if funding.synthesized_json.get("public_card") %}
+  <details>
+    <summary>Public-card draft</summary>
+    {% set card = funding.synthesized_json.get("public_card") %}
+    <article class="admin-preview-card">
+      <p class="admin-preview-card-kicker">Funding · Effort: {{ (card.get("effort_label") or funding.effort_index or "unknown")|title }}</p>
+      <h3 class="admin-preview-card-title">{{ card.get("display_title") or funding.title }}</h3>
+      <p class="admin-preview-card-body">{{ card.get("short_summary") or "—" }}</p>
+      {% if card.get("best_for") %}
+      <p class="admin-preview-card-meta">Best for: {{ card.get("best_for") | join("; ") }}</p>
+      {% endif %}
+      {% if card.get("tags") %}
+      <p class="admin-preview-card-meta">{{ card.get("tags") | join(" · ") }}</p>
+      {% endif %}
+    </article>
+    <form method="post" action="{{ url_for('admin.funding_apply_public_card', funding_id=funding.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="primary-btn-inline">Apply public-card copy</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+
+<p class="admin-form-foot"><a href="{{ url_for('admin.funding_list') }}" class="back-link">&larr; All funding</a></p>
+{% endblock %}

@@ -2820,6 +2820,71 @@ body.admin {
   margin-top: 1.75rem;
 }
 
+.admin-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.source-view-section details,
+.admin-main > details {
+  margin: 0.75rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.source-view-section summary,
+.admin-main > details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.source-view-section details > p:last-child,
+.admin-main > details > p:last-child {
+  margin-bottom: 0;
+}
+
+.admin-preview-card {
+  margin: 0.85rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.admin-preview-card-kicker {
+  margin: 0 0 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.admin-preview-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.admin-preview-card-body {
+  margin: 0.55rem 0 0;
+  color: var(--text-soft);
+}
+
+.admin-preview-card-meta {
+  margin: 0.55rem 0 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
 /* Major break below Settings (save/delete row) before Snapshots */
 .source-view-section--break {
   margin-top: 2.75rem;

@@ -1,0 +1,24 @@
+Write public-facing copy for a Synapse Idea page.
+
+Rules:
+- Be clear, generous, exploratory, and useful to researchers.
+- Do not make private lead-generation claims.
+- Do not imply that related people or organizations are seeking collaboration.
+- Do not expose private match scores, outreach strategy, or inferred pain points.
+- Avoid hype.
+- Return valid JSON only.
+
+Idea:
+{{ idea_json }}
+
+Related public entities:
+{{ related_entities_json }}
+
+Related funding summaries:
+{{ related_funding_json }}
+
+Hub capabilities:
+{{ hub_capabilities_json }}
+
+Return JSON matching this schema:
+{{ schema }}

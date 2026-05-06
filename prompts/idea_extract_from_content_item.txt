@@ -1,0 +1,19 @@
+Extract candidate research Ideas from this public content item.
+
+An Idea is a reusable research theme, technical capability, method cluster, funding theme, strategic area, or buildable concept. It is not just a generic keyword or one paper title.
+
+Rules:
+- Use only the provided content item evidence.
+- Prefer ideas that could connect multiple people, organizations, places, funding opportunities, and Hub capabilities.
+- Avoid overly broad generic fields such as "science", "biology", or "neuroscience" unless no better scoped idea is available.
+- Keep suggestions private/review-only.
+- Return valid JSON only.
+
+Content item evidence:
+{{ content_item_evidence }}
+
+Existing nearby context:
+{{ existing_context }}
+
+Return JSON matching this schema:
+{{ schema }}

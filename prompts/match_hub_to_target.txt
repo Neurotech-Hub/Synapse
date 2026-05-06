@@ -1,0 +1,24 @@
+Evaluate whether this target has a meaningful collaboration fit with the Neurotech Hub.
+
+Rules:
+- Be evidence-grounded.
+- Do not invent a need.
+- Distinguish documented facts from plausible inference.
+- Suggest concrete but non-salesy collaboration shapes.
+- Keep the output private/internal.
+- Return valid JSON only.
+
+Hub persona/corpus:
+{{ hub_context }}
+
+Target:
+{{ target_json }}
+
+Related ideas:
+{{ related_ideas }}
+
+Related funding:
+{{ related_funding }}
+
+Return JSON matching this schema:
+{{ schema }}

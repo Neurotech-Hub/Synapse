@@ -1,0 +1,19 @@
+Create a short public blurb for the Synapse research atlas.
+
+Rules:
+- Be inviting, concrete, and neutral.
+- Do not mention private matching, lead scores, or outreach strategy.
+- Keep it concise.
+- Return valid JSON only.
+
+Featured ideas:
+{{ featured_ideas_json }}
+
+Featured funding:
+{{ featured_funding_json }}
+
+Latest public signals:
+{{ latest_signals_json }}
+
+Return JSON matching this schema:
+{{ schema }}

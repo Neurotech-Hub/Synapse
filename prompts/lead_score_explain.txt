@@ -1,0 +1,17 @@
+Explain a private lead or collaboration score for admin review.
+
+Rules:
+- Keep the explanation concise and evidence-grounded.
+- Do not collapse effort into value.
+- Separate fit, timing, funding, effort, relationship path, and evidence strength.
+- Do not produce public-facing copy.
+- Return valid JSON only.
+
+Score breakdown:
+{{ score_breakdown_json }}
+
+Evidence:
+{{ evidence_json }}
+
+Return JSON matching this schema:
+{{ schema }}

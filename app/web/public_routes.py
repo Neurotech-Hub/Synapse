@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
+from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 from flask_wtf import FlaskForm
 from wtforms import SelectField, StringField, SubmitField
@@ -27,8 +28,10 @@ from app.domain.public_sources import (
     publicly_listed_people,
 )
 from app.extensions import db, limiter
+from app.funding.public import funding_is_publicly_visible
+from app.ideas.service import idea_is_publicly_visible
 from app.ingest.urlnorm import UrlValidationError, canonical_url
-from app.models import ContentItem, Organization, Person, Source
+from app.models import ContentItem, FundingOpportunity, Idea, MatchEdge, Organization, Person, Source
 
 public_bp = Blueprint("public", __name__)
 
@@ -136,6 +139,8 @@ def _batch_card_date_meta(source: Source | None, items: list[ContentItem]) -> tu
 def index():
     form = SubmitUrlForm()
     latest_groups, filter_label = _latest_feed_groups()
+    idea_spotlights = _public_ideas_query().order_by(Idea.updated_at.desc(), Idea.title.asc()).limit(3).all()
+    funding_spotlights = _public_funding_query().filter(FundingOpportunity.status == "active").order_by(FundingOpportunity.updated_at.desc()).limit(3).all()
     if request.method == "POST":
         if not form.validate_on_submit():
             return (
@@ -145,6 +150,8 @@ def index():
                     nav_active="home",
                     latest_groups=latest_groups,
                     filter_label=filter_label,
+                    idea_spotlights=idea_spotlights,
+                    funding_spotlights=funding_spotlights,
                 ),
                 400,
             )
@@ -159,6 +166,8 @@ def index():
                     nav_active="home",
                     latest_groups=latest_groups,
                     filter_label=filter_label,
+                    idea_spotlights=idea_spotlights,
+                    funding_spotlights=funding_spotlights,
                 ),
                 400,
             )
@@ -194,6 +203,8 @@ def index():
         nav_active="home",
         latest_groups=latest_groups,
         filter_label=filter_label,
+        idea_spotlights=idea_spotlights,
+        funding_spotlights=funding_spotlights,
     )
 
 
@@ -212,6 +223,188 @@ def organizations_list():
         "public/organizations_list.html",
         organizations=organizations,
         nav_active="organizations",
+    )
+
+
+def _ideas_enabled() -> bool:
+    return bool(
+        current_app.config.get("SYNAPSE_IDEAS_ENABLED", True)
+        and current_app.config.get("SYNAPSE_PUBLIC_IDEAS_ENABLED", True)
+    )
+
+
+def _funding_enabled() -> bool:
+    return bool(current_app.config.get("SYNAPSE_PUBLIC_FUNDING_ENABLED", True))
+
+
+def _public_ideas_query():
+    return (
+        Idea.query.filter(Idea.is_public.is_(True), Idea.is_reviewed.is_(True), Idea.status == "public")
+        .filter(Idea.archived_at.is_(None))
+    )
+
+
+def _public_funding_query():
+    return (
+        FundingOpportunity.query.filter(
+            FundingOpportunity.is_public.is_(True),
+            FundingOpportunity.is_reviewed.is_(True),
+            FundingOpportunity.status.in_(["active", "expired"]),
+        )
+        .filter(FundingOpportunity.archived_at.is_(None))
+    )
+
+
+def _public_related_funding_for_idea(idea: Idea, *, limit: int = 6) -> list[FundingOpportunity]:
+    edges = (
+        MatchEdge.query.filter(
+            MatchEdge.source_type == "funding",
+            MatchEdge.target_type == "idea",
+            MatchEdge.target_id == idea.id,
+            MatchEdge.match_type == "funding_to_idea",
+            MatchEdge.status == "accepted",
+            MatchEdge.visibility.in_(["public_safe", "public"]),
+        )
+        .order_by(MatchEdge.score_total.desc().nullslast(), MatchEdge.updated_at.desc())
+        .limit(limit * 2)
+        .all()
+    )
+    rows: list[FundingOpportunity] = []
+    seen: set[int] = set()
+    for edge in edges:
+        funding = db.session.get(FundingOpportunity, edge.source_id)
+        if funding is not None and funding.id not in seen and funding_is_publicly_visible(funding):
+            rows.append(funding)
+            seen.add(funding.id)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _public_related_ideas_for_funding(funding: FundingOpportunity, *, limit: int = 6) -> list[Idea]:
+    edges = (
+        MatchEdge.query.filter(
+            MatchEdge.source_type == "funding",
+            MatchEdge.source_id == funding.id,
+            MatchEdge.target_type == "idea",
+            MatchEdge.match_type == "funding_to_idea",
+            MatchEdge.status == "accepted",
+            MatchEdge.visibility.in_(["public_safe", "public"]),
+        )
+        .order_by(MatchEdge.score_total.desc().nullslast(), MatchEdge.updated_at.desc())
+        .limit(limit * 2)
+        .all()
+    )
+    rows: list[Idea] = []
+    seen: set[int] = set()
+    for edge in edges:
+        idea = db.session.get(Idea, edge.target_id)
+        if idea is not None and idea.id not in seen and idea_is_publicly_visible(idea):
+            rows.append(idea)
+            seen.add(idea.id)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+@public_bp.route("/ideas")
+@public_bp.route("/ideas/")
+def ideas_list():
+    if not _ideas_enabled():
+        abort(404)
+    ideas = _public_ideas_query().order_by(Idea.updated_at.desc(), Idea.title.asc()).all()
+    related_counts = {idea.id: len(_public_related_funding_for_idea(idea, limit=20)) for idea in ideas}
+    return render_template("public/ideas/index.html", ideas=ideas, related_counts=related_counts, nav_active="ideas")
+
+
+@public_bp.route("/ideas/<slug>")
+def idea_detail(slug: str):
+    if not _ideas_enabled():
+        abort(404)
+    idea = Idea.query.filter_by(slug=slug).first()
+    if idea is None or not idea_is_publicly_visible(idea):
+        abort(404)
+    return render_template(
+        "public/ideas/detail.html",
+        idea=idea,
+        related_funding=_public_related_funding_for_idea(idea),
+        nav_active="ideas",
+    )
+
+
+@public_bp.route("/funding")
+@public_bp.route("/funding/")
+def funding_list():
+    if not _funding_enabled():
+        abort(404)
+    effort = (request.args.get("effort") or "").strip().lower()
+    status = (request.args.get("status") or "active").strip().lower()
+    query = _public_funding_query()
+    if status in {"active", "expired"}:
+        query = query.filter(FundingOpportunity.status == status)
+    if effort in {"mild", "moderate", "heavy", "unknown"}:
+        query = query.filter(FundingOpportunity.effort_index == effort)
+    fundings = query.order_by(FundingOpportunity.deadline_date.is_(None), FundingOpportunity.deadline_date.asc(), FundingOpportunity.updated_at.desc()).all()
+    related_counts = {funding.id: len(_public_related_ideas_for_funding(funding, limit=20)) for funding in fundings}
+    return render_template(
+        "public/funding/index.html",
+        fundings=fundings,
+        related_counts=related_counts,
+        selected_effort=effort,
+        selected_status=status,
+        nav_active="funding",
+    )
+
+
+@public_bp.route("/funding/<slug>")
+def funding_detail(slug: str):
+    if not _funding_enabled():
+        abort(404)
+    funding = FundingOpportunity.query.filter_by(slug=slug).first()
+    if funding is None or not funding_is_publicly_visible(funding):
+        abort(404)
+    return render_template(
+        "public/funding/detail.html",
+        funding=funding,
+        related_ideas=_public_related_ideas_for_funding(funding),
+        nav_active="funding",
+    )
+
+
+@public_bp.route("/explore")
+@public_bp.route("/explore/")
+def explore():
+    return render_template(
+        "public/explore.html",
+        ideas=_public_ideas_query().order_by(Idea.updated_at.desc()).limit(6).all(),
+        fundings=_public_funding_query().order_by(FundingOpportunity.updated_at.desc()).limit(6).all(),
+        people=publicly_listed_people()[:6],
+        organizations=publicly_listed_organizations()[:6],
+        nav_active="explore",
+    )
+
+
+@public_bp.route("/search")
+def search():
+    q = (request.args.get("q") or "").strip()
+    like = f"%{q}%"
+    ideas = []
+    fundings = []
+    people = []
+    organizations = []
+    if q:
+        ideas = _public_ideas_query().filter(or_(Idea.title.ilike(like), Idea.short_description.ilike(like), Idea.public_summary.ilike(like))).limit(10).all()
+        fundings = _public_funding_query().filter(or_(FundingOpportunity.title.ilike(like), FundingOpportunity.sponsor_name.ilike(like), FundingOpportunity.summary_public.ilike(like))).limit(10).all()
+        people = [p for p in publicly_listed_people() if q.lower() in (p.display_name or "").lower()][:10]
+        organizations = [o for o in publicly_listed_organizations() if q.lower() in (o.display_name or "").lower()][:10]
+    return render_template(
+        "public/search.html",
+        q=q,
+        ideas=ideas,
+        fundings=fundings,
+        people=people,
+        organizations=organizations,
+        nav_active="search",
     )
 
 

@@ -1,0 +1,14 @@
+Repair malformed JSON.
+
+Rules:
+- Return valid JSON only.
+- Preserve the original meaning.
+- Do not add new facts.
+- If a value is missing or unclear, use null, [], or "".
+- Match the requested schema.
+
+Requested schema:
+{{ schema }}
+
+Malformed output:
+{{ malformed_output }}

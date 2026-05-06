@@ -1,0 +1,82 @@
+{% extends "admin/base.html" %}
+{% import "admin/includes/help_macros.html" as syn_help %}
+{% block title %}Settings{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Settings</h1>
+  {% call syn_help.tips_bubble() %}{% include "admin/includes/help_settings.html" %}{% endcall %}
+</header>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Feature flags</h2>
+  <table class="tbl tbl-compact">
+    <thead><tr><th>Feature</th><th>Status</th><th>Env</th></tr></thead>
+    <tbody>
+    {% for label, enabled, env_name in feature_flags %}
+      <tr><td>{{ label }}</td><td>{% if enabled %}<span class="badge ok">enabled</span>{% else %}<span class="badge bad">disabled</span>{% endif %}</td><td class="mono">{{ env_name }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Provider status</h2>
+  <table class="tbl tbl-compact">
+    <tbody>
+      <tr><th>Ollama</th><td>{% if ollama_status.reachable %}reachable{% else %}offline{% endif %}</td><td class="mono">{{ ollama_status.host }} · {{ ollama_status.model }}</td></tr>
+      <tr><th>Ollama model</th><td>{% if ollama_status.model_ok %}available{% else %}not detected{% endif %}</td><td></td></tr>
+      <tr><th>OpenAI key</th><td>{% if openai_status.configured %}configured{% else %}not configured{% endif %}</td><td class="mono">{{ openai_status.identity_model }}</td></tr>
+      <tr><th>OpenAI SDK</th><td>{% if openai_status.sdk_installed %}installed{% else %}missing{% endif %}</td><td></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Call caps</h2>
+  <table class="tbl tbl-compact">
+    <thead><tr><th>Cap</th><th>Value</th><th>Env</th></tr></thead>
+    <tbody>
+    {% for label, value, env_name in caps %}
+      <tr><td>{{ label }}</td><td>{{ value }}</td><td class="mono">{{ env_name }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Provider policy</h2>
+  <table class="tbl tbl-compact">
+    <tbody>
+    {% for label, value in provider_policy %}
+      <tr><th>{{ label }}</th><td>{{ value }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Recent prompt runs</h2>
+  <table class="tbl tbl-compact">
+    <thead><tr><th>ID</th><th>Prompt</th><th>Provider</th><th>Status</th><th>Source</th><th>Problem</th><th>Created</th></tr></thead>
+    <tbody>
+    {% for run in recent_runs %}
+      <tr>
+        <td>{{ run.id }}</td>
+        <td>{{ run.prompt_name }} <span class="muted">v{{ run.prompt_version }}</span></td>
+        <td>{{ run.provider }}</td>
+        <td>{{ run.status }}</td>
+        <td>{% if run.source_type %}{{ run.source_type }} #{{ run.source_id }}{% else %}—{% endif %}</td>
+        <td>
+          {% if run.error_message %}{{ run.error_message }}
+          {% elif run.validation_errors_json %}{{ run.validation_errors_json | join("; ") }}
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ run.created_at|local_dt("datetime") }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="tbl-empty muted">No prompt runs recorded yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

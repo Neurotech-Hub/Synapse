@@ -19,8 +19,10 @@
       </p>
       <nav class="public-nav" aria-label="Public sections">
         <a href="{{ url_for('public.index') }}" class="public-nav-link{% if nav_active == 'home' %} is-active{% endif %}">Home</a>
-        <a href="{{ url_for('public.people_list') }}" class="public-nav-link{% if nav_active == 'people' %} is-active{% endif %}">People</a>
-        <a href="{{ url_for('public.organizations_list') }}" class="public-nav-link{% if nav_active == 'organizations' %} is-active{% endif %}">Organizations</a>
+        <a href="{{ url_for('public.explore') }}" class="public-nav-link{% if nav_active == 'explore' %} is-active{% endif %}">Explore</a>
+        <a href="{{ url_for('public.funding_list') }}" class="public-nav-link{% if nav_active == 'funding' %} is-active{% endif %}">Opportunities</a>
+        <a href="mailto:gaidica@wustl.edu" class="public-nav-link">Work with the Hub</a>
+        <a href="{{ url_for('public.search') }}" class="public-nav-link{% if nav_active == 'search' %} is-active{% endif %}">Search</a>
       </nav>
     </div>
   </header>

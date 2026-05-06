@@ -1,0 +1,19 @@
+Draft a concise outreach angle for this reviewed collaboration hypothesis.
+
+Rules:
+- Be collegial, not salesy.
+- Do not mention private scores.
+- Do not imply the target needs help unless evidence directly supports it.
+- Focus on shared research opportunity and concrete Hub capabilities.
+- Keep email text brief.
+- Private/internal output only.
+- Return valid JSON only.
+
+Collaboration hypothesis:
+{{ collaboration_hypothesis }}
+
+Hub context:
+{{ hub_context }}
+
+Return JSON matching this schema:
+{{ schema }}

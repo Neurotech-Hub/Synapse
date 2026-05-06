@@ -1,0 +1,80 @@
+{% extends "admin/base.html" %}
+{% block title %}Match edge #{{ edge.id }}{% endblock %}
+{% block body %}
+<header class="page-head">
+  <h1>Match edge #{{ edge.id }}</h1>
+</header>
+
+<p class="contextual-note">
+  {{ edge.match_type }} · {{ labels[0] }} → {{ labels[1] }}
+</p>
+
+<table class="tbl tbl-compact">
+  <tbody>
+    <tr><th>Status</th><td>{{ edge.status }}</td></tr>
+    <tr><th>Visibility</th><td>{{ edge.visibility }}</td></tr>
+    <tr><th>Score</th><td>{% if edge.score_total is not none %}{{ edge.score_total | round(2) }}{% else %}—{% endif %}</td></tr>
+    <tr><th>Confidence</th><td>{% if edge.confidence is not none %}{{ edge.confidence | round(2) }}{% else %}—{% endif %}</td></tr>
+    <tr><th>Match run</th><td>{% if edge.match_run_id %}#{{ edge.match_run_id }}{% else %}—{% endif %}</td></tr>
+    <tr><th>LLM run</th><td>{% if llm_run %}#{{ llm_run.id }} · {{ llm_run.status }} · {{ llm_run.provider }}{% else %}—{% endif %}</td></tr>
+  </tbody>
+</table>
+
+<section class="source-view-section">
+  <h2 class="source-view-h2">Rationale</h2>
+  <form method="post" action="{{ url_for('admin.matching_edge_note', edge_id=edge.id) }}" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <div class="field-group">
+      <label class="field-label" for="private_rationale">Private rationale / note</label>
+      <textarea class="field-input field-input-multiline" name="private_rationale" id="private_rationale" rows="5">{{ edge.private_rationale or edge.rationale or "" }}</textarea>
+    </div>
+    <div class="field-group">
+      <label class="field-label" for="public_rationale">Public-safe summary candidate</label>
+      <textarea class="field-input field-input-multiline" name="public_rationale" id="public_rationale" rows="3">{{ edge.public_rationale or "" }}</textarea>
+      <p class="field-hint muted">This is still gated by accepted status and public-safe visibility before public display.</p>
+    </div>
+    <div class="form-submit-row">
+      <button type="submit" class="primary-btn-inline">Save rationale</button>
+    </div>
+  </form>
+</section>
+
+{% if edge.evidence_json %}
+<section class="source-view-section">
+  <h2 class="source-view-h2">Evidence</h2>
+  <details>
+    <summary>Evidence snippets</summary>
+    <pre class="mono">{{ edge.evidence_json }}</pre>
+  </details>
+</section>
+{% endif %}
+
+<div class="form-submit-row">
+  <form method="post" action="{{ url_for('admin.matching_edge_action', edge_id=edge.id, action='accept') }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="primary-btn-inline">Accept</button>
+  </form>
+  <form method="post" action="{{ url_for('admin.matching_edge_action', edge_id=edge.id, action='reject') }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="primary-btn-inline">Reject</button>
+  </form>
+  <form method="post" action="{{ url_for('admin.matching_edge_action', edge_id=edge.id, action='public_safe') }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="primary-btn-inline">Mark public-safe</button>
+  </form>
+  <form method="post" action="{{ url_for('admin.matching_edge_action', edge_id=edge.id, action='private') }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="primary-btn-inline">Mark private</button>
+  </form>
+  <form method="post" action="{{ url_for('admin.matching_edge_generate_rationale', edge_id=edge.id) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="primary-btn-inline">Generate rationale</button>
+  </form>
+  <form method="post" action="{{ url_for('admin.matching_edge_action', edge_id=edge.id, action='archive') }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button type="submit" class="danger-btn">Archive</button>
+  </form>
+</div>
+
+<p class="admin-form-foot"><a href="{{ url_for('admin.matching_dashboard') }}" class="back-link">&larr; Matching</a></p>
+{% endblock %}

@@ -66,6 +66,10 @@
       <td class="tbl-actions">
         <div class="tbl-actions-inner">
           <a href="{{ url_for('admin.items_edit', iid=it.id) }}">View</a>
+          <form method="post" action="{{ url_for('admin.ideas_suggestions_generate_content_item', content_item_id=it.id) }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="linkish">Suggest Ideas</button>
+          </form>
         </div>
       </td>
     </tr>

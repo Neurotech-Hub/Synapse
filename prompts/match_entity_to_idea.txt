@@ -1,0 +1,18 @@
+Evaluate whether the entity is meaningfully related to this research Idea.
+
+Rules:
+- Direct means the entity clearly works in this area.
+- Adjacent means the entity uses related methods, organisms, tools, or questions.
+- Weak means there is only a loose connection.
+- Do not overfit based on one generic keyword.
+- Distinguish evidence from inference.
+- Return valid JSON only.
+
+Entity snapshot:
+{{ entity_snapshot }}
+
+Idea:
+{{ idea_json }}
+
+Return JSON matching this schema:
+{{ schema }}

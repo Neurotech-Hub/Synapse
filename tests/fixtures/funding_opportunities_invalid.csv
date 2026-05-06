@@ -1,0 +1,4 @@
+external_id,title,sponsor_name,source_url,source_type,status,visibility,deadline_date,deadline_text,amount_min,amount_max,amount_text,mechanism,effort_index_override,topic_tags,method_tags,eligibility_summary,notes_private,raw_text
+BAD-FUND-001,,Example Sponsor,https://example.org/funding/missing-title,csv,active,public,2026-07-01,"July 1, 2026",1000,2000,$2,000,seed,mild,neurotechnology,,Missing title should fail.,,
+BAD-FUND-002,Bad URL Opportunity,Example Sponsor,ftp://example.org/funding/bad-url,csv,active,public,2026-07-01,"July 1, 2026",1000,2000,$2,000,seed,mild,neurotechnology,,Bad URL scheme should fail.,,
+BAD-FUND-003,Bad Effort Opportunity,Example Sponsor,https://example.org/funding/bad-effort,csv,active,public,2026-07-01,"July 1, 2026",1000,2000,$2,000,seed,none,neurotechnology,,Invalid effort should fail.,,
