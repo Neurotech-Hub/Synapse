@@ -3,8 +3,8 @@
 {% block title %}Synapse{% endblock %}
 {% block content %}
   <section class="hero-block">
-    <h1 class="hero-title">A living atlas of neurotechnology opportunities.</h1>
-    <p class="hero-sub">Explore ideas, funding signals, people, and organizations shaping buildable neuroscience collaborations.</p>
+    <h1 class="hero-title">Tell us what to watch.</h1>
+    <p class="hero-sub">Ready to ingest and draw connections from any web location.</p>
   </section>
 
   <section class="composer-panel" aria-label="Add source">
@@ -20,7 +20,7 @@
         <div class="composer-row composer-row--fields">
           {{ form.url(
             class_="composer-input",
-            placeholder="Paste a lab site, RSS page, anything https…",
+            placeholder="Suggest a public lab site, feed, or project page…",
             autocomplete="url",
             autofocus=true,
             **({"aria-invalid": "true", "aria-describedby": "composer-errors"} if form.url.errors else {})
@@ -43,30 +43,6 @@
       </form>
     </div>
   </section>
-
-  {% if idea_spotlights or funding_spotlights %}
-  <section class="public-latest-section" aria-labelledby="atlas-heading">
-    <div class="public-latest-head">
-      <h2 id="atlas-heading" class="public-section-title public-section-title--home">Explore the Atlas</h2>
-    </div>
-    <div class="public-related-card-list">
-      {% for idea in idea_spotlights %}
-      <article class="public-related-card">
-        <p class="public-card-kicker">Idea</p>
-        <h3 class="public-card-title"><a href="{{ url_for('public.idea_detail', slug=idea.slug) }}">{{ idea.title }}</a></h3>
-        <p class="public-card-snippet">{{ idea.short_description or idea.public_summary or "A public Idea." }}</p>
-      </article>
-      {% endfor %}
-      {% for funding in funding_spotlights %}
-      <article class="public-related-card">
-        <p class="public-card-kicker">Funding · Effort: {{ (funding.effort_index or "unknown")|title }}</p>
-        <h3 class="public-card-title"><a href="{{ url_for('public.funding_detail', slug=funding.slug) }}">{{ funding.title }}</a></h3>
-        <p class="public-card-snippet">{{ funding.summary_public or funding.eligibility_summary or "Review the official source before decisions." }}</p>
-      </article>
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
 
   <section class="public-latest-section" aria-labelledby="latest-heading">
     <div class="public-latest-head">

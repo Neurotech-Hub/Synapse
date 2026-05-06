@@ -383,8 +383,9 @@ def test_leads_page_has_pipeline_settings(client):
     )
     r = client.get("/admin/leads")
     assert r.status_code == 200
-    assert b"New Report" in r.data
-    assert b"Recent lead report logs" in r.data
+    assert b"New candidate" in r.data
+    assert b"Queue from recent content" in r.data
+    assert b"Recent lead candidate logs" in r.data
 
 
 def test_dashboard_filters_lead_job_poll_logs(app, client):
@@ -397,7 +398,13 @@ def test_dashboard_filters_lead_job_poll_logs(app, client):
         )
         db.session.add(
             PollLog(
-                detail="[lead-report] UNIQUE_REPORT_LOG_SNIP_774",
+                detail="[lead-candidate] UNIQUE_CANDIDATE_LOG_SNIP_774",
+                ok=True,
+            )
+        )
+        db.session.add(
+            PollLog(
+                detail="[lead-report] UNIQUE_LEGACY_REPORT_LOG_SNIP_775",
                 ok=True,
             )
         )
@@ -418,11 +425,13 @@ def test_dashboard_filters_lead_job_poll_logs(app, client):
     assert r.status_code == 200
     assert b"UNIQUE_INGEST_LOG_SNIP_882" in r.data
     assert b"UNIQUE_QUAL_LOG_SNIP_991" not in r.data
-    assert b"UNIQUE_REPORT_LOG_SNIP_774" not in r.data
+    assert b"UNIQUE_CANDIDATE_LOG_SNIP_774" not in r.data
+    assert b"UNIQUE_LEGACY_REPORT_LOG_SNIP_775" not in r.data
 
     r_leads = client.get("/admin/leads")
     assert r_leads.status_code == 200
-    assert b"UNIQUE_REPORT_LOG_SNIP_774" in r_leads.data
+    assert b"UNIQUE_CANDIDATE_LOG_SNIP_774" in r_leads.data
+    assert b"UNIQUE_LEGACY_REPORT_LOG_SNIP_775" not in r_leads.data
     assert b"UNIQUE_QUAL_LOG_SNIP_991" not in r_leads.data
 
 

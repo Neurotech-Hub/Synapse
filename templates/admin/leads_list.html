@@ -1,40 +1,44 @@
 {% extends "admin/base.html" %}
 {% import "admin/includes/help_macros.html" as syn_help %}
-{% block title %}Lead reports{% endblock %}
+{% block title %}Lead candidates{% endblock %}
 {% block body %}
-{% if lead_report_busy %}
-<p id="lead-report-run-banner"
+{% if lead_candidate_busy %}
+<p id="lead-candidate-run-banner"
    class="leads-pipeline-run-banner leads-pipeline-run-banner--page-top muted"
-   data-poll-report-status="{{ url_for('admin.lead_report_run_status') }}"
-   {% if active_lead_report_id %}data-active-report-id="{{ active_lead_report_id }}"{% endif %}
+   data-poll-candidate-status="{{ url_for('admin.lead_report_run_status') }}"
+   {% if active_lead_candidate_id %}data-active-candidate-id="{{ active_lead_candidate_id }}"{% endif %}
    aria-live="polite">
-  <strong>Running</strong>{% if active_lead_report_id %} — report #{{ active_lead_report_id }}{% endif %}
-  · <span class="lead-report-phase-text">{{ lead_report_phase or 'Starting…' }}</span>
-  <span class="muted"> Watch <code>[lead-report]</code> in the logs below when finished.</span>
+  <strong>Running</strong>{% if active_lead_candidate_id %} — candidate #{{ active_lead_candidate_id }}{% endif %}
+  · <span class="lead-candidate-phase-text">{{ lead_candidate_phase or 'Starting…' }}</span>
+  <span class="muted"> Watch <code>[lead-candidate]</code> in the logs below when finished.</span>
 </p>
 {% endif %}
 
 <header class="page-head page-head--compact">
-  <h1>Lead reports</h1>
+  <h1>Lead candidates</h1>
   <div class="page-head-actions">
-    <div class="leads-pipeline-head-split" role="group" aria-label="Lead reports">
-      <button type="button" class="primary-btn primary-btn-compact" data-lead-report-dialog-open>New Report</button>
+    <div class="leads-pipeline-head-split" role="group" aria-label="Lead candidates">
+      <form method="post" action="{{ url_for('admin.lead_candidates_generate_recent') }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" class="primary-btn primary-btn-compact">Queue from recent content</button>
+      </form>
+      <button type="button" class="primary-btn primary-btn-compact" data-lead-candidate-dialog-open>New candidate</button>
     </div>
     {% call syn_help.tips_bubble() %}{% include "admin/includes/help_leads_list.html" %}{% endcall %}
   </div>
 </header>
 
 
-<dialog id="lead-report-new-dialog" class="admin-dialog leads-report-new-dialog" aria-labelledby="lead-report-new-dialog-title">
+<dialog id="lead-candidate-new-dialog" class="admin-dialog leads-report-new-dialog" aria-labelledby="lead-candidate-new-dialog-title">
   <div class="admin-dialog-sheet">
     <div class="admin-dialog-head">
-      <h2 id="lead-report-new-dialog-title" class="admin-dialog-title">New lead report</h2>
-      <button type="button" class="admin-dialog-close" data-lead-report-dialog-close aria-label="Close">
+      <h2 id="lead-candidate-new-dialog-title" class="admin-dialog-title">New lead candidate</h2>
+      <button type="button" class="admin-dialog-close" data-lead-candidate-dialog-close aria-label="Close">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
       </button>
     </div>
     <div class="admin-dialog-body">
-      <p class="muted contextual-note leads-report-new-intro">Runs in the background (may take minutes). The Hub organization is designated by the <strong>is_hub flag</strong> on the organization edit page. Uses <code>prompts/lead_report_*.txt</code> and Ollama <code>SYNAPSE_LEAD_REPORT_NUM_CTX</code>.</p>
+      <p class="muted contextual-note leads-report-new-intro">Runs in the background and favors recent content tied to the selected subject. The Hub organization is designated by the <strong>is_hub flag</strong> on the organization edit page.</p>
 
       <form method="post" action="{{ url_for('admin.lead_reports_new') }}" class="admin-form lead-report-new-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -77,8 +81,8 @@
         </div>
 
         <div class="form-submit-row form-submit-row--lead-report-modal">
-          <button type="button" class="disapprove-btn" data-lead-report-dialog-close>Cancel</button>
-          <button type="submit" class="primary-btn">Queue report</button>
+          <button type="button" class="disapprove-btn" data-lead-candidate-dialog-close>Cancel</button>
+          <button type="submit" class="primary-btn">Queue candidate</button>
         </div>
       </form>
     </div>
@@ -87,18 +91,18 @@
 
 <div class="leads-report-logs">
   {% set logs = report_logs %}
-  {% set heading_h2 = "Recent lead report logs" %}
-  {% set log_empty_message = "No lead report jobs logged yet." %}
+  {% set heading_h2 = "Recent lead candidate logs" %}
+  {% set log_empty_message = "No lead candidate jobs logged yet." %}
   {% include "admin/includes/poll_logs_list.html" %}
 </div>
 
-<h2 class="source-view-h2" id="lead-reports-section">Reports</h2>
+<h2 class="source-view-h2" id="lead-candidates-section">Candidates</h2>
 <form method="get" class="filter-form filter-form--inline list-controls--reports" action="{{ url_for('admin.leads_list') }}">
   <label>Filter
-    <select name="report_review" onchange="this.form.submit()">
-      <option value="" {% if not report_review_filter %}selected{% endif %}>All</option>
-      <option value="unreviewed" {% if report_review_filter == 'unreviewed' %}selected{% endif %}>Unreviewed only</option>
-      <option value="reviewed" {% if report_review_filter == 'reviewed' %}selected{% endif %}>Reviewed only</option>
+    <select name="candidate_review" onchange="this.form.submit()">
+      <option value="" {% if not candidate_review_filter %}selected{% endif %}>All</option>
+      <option value="unreviewed" {% if candidate_review_filter == 'unreviewed' %}selected{% endif %}>Unreviewed only</option>
+      <option value="reviewed" {% if candidate_review_filter == 'reviewed' %}selected{% endif %}>Reviewed only</option>
     </select>
   </label>
 </form>
@@ -109,7 +113,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for r in report_rows %}
+    {% for r in candidate_rows %}
     <tr>
       <td>{{ r.id }}</td>
       <td class="muted">
@@ -132,7 +136,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="tbl-empty muted">No reports yet — use <strong>New Report</strong>.</td></tr>
+    <tr><td colspan="7" class="tbl-empty muted">No candidates yet — use <strong>New candidate</strong>.</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -152,15 +156,15 @@
       });
     });
   }
-  var reportDlg = document.getElementById("lead-report-new-dialog");
-  wireBackdropClose(reportDlg, "[data-lead-report-dialog-close]");
+  var reportDlg = document.getElementById("lead-candidate-new-dialog");
+  wireBackdropClose(reportDlg, "[data-lead-candidate-dialog-close]");
   function openReportDlg() {
     if (reportDlg && reportDlg.showModal) reportDlg.showModal();
   }
-  document.querySelectorAll("[data-lead-report-dialog-open]").forEach(function (btn) {
+  document.querySelectorAll("[data-lead-candidate-dialog-open]").forEach(function (btn) {
     btn.addEventListener("click", openReportDlg);
   });
-  {% if open_report_modal %}
+  {% if open_candidate_modal %}
   openReportDlg();
   {% endif %}
 
@@ -184,15 +188,15 @@
     sync();
   })();
 
-  var banner = document.getElementById("lead-report-run-banner");
-  var pollUrl = banner && banner.getAttribute("data-poll-report-status");
+  var banner = document.getElementById("lead-candidate-run-banner");
+  var pollUrl = banner && banner.getAttribute("data-poll-candidate-status");
   function poll() {
     if (!pollUrl) return;
     fetch(pollUrl, { credentials: "same-origin", headers: { "Accept": "application/json" } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) return;
-        var phaseEl = banner.querySelector(".lead-report-phase-text");
+        var phaseEl = banner.querySelector(".lead-candidate-phase-text");
         if (!d.busy) {
           window.location.reload();
           return;

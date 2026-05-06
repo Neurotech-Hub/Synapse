@@ -1,10 +1,11 @@
 {% extends "public/layout.html" %}
 {% from "public/includes/card_macros.html" import reveal_script %}
-{% block title %}Funding Radar{% endblock %}
+{% block title %}Opportunities{% endblock %}
 {% block content %}
   <section class="public-page-hero">
-    <h1 class="public-page-title">Funding Radar</h1>
-    <p class="public-page-lead">A curated view of opportunities that may support neuroscience technology, methods, tools, and collaborative research.</p>
+    <p class="public-card-kicker">Funding Radar</p>
+    <h1 class="public-page-title">Opportunities</h1>
+    <p class="public-page-lead">A curated view of public funding and opportunity signals that may support neuroscience technology, methods, tools, and collaborative research.</p>
   </section>
 
   <form method="get" class="public-filter-bar" aria-label="Funding filters">
@@ -32,7 +33,7 @@
     <div class="public-latest-cards">
       {% for funding in fundings %}
       <article class="public-card public-card--reveal" style="--reveal-i: {{ loop.index0 }}">
-        <p class="public-card-kicker">Funding · Effort: {{ (funding.effort_index or "unknown")|title }}</p>
+        <p class="public-card-kicker">Opportunity · Effort: {{ (funding.effort_index or "unknown")|title }}</p>
         <h2 class="public-card-title"><a href="{{ url_for('public.funding_detail', slug=funding.slug) }}">{{ funding.title }}</a></h2>
         <p class="public-card-snippet">{{ funding.summary_public or funding.eligibility_summary or "Review the official source before making funding decisions." }}</p>
         <p class="public-card-meta-date">
@@ -42,9 +43,6 @@
         </p>
         {% if funding.topic_tags_json or funding.method_tags_json %}
         <p class="public-card-tags">{{ ((funding.topic_tags_json or []) + (funding.method_tags_json or []))[:6] | join(" · ") }}</p>
-        {% endif %}
-        {% if related_counts.get(funding.id, 0) %}
-        <p class="public-card-meta-date">{{ related_counts.get(funding.id) }} related idea{% if related_counts.get(funding.id) != 1 %}s{% endif %}</p>
         {% endif %}
       </article>
       {% endfor %}

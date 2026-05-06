@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
-from sqlalchemy import and_, desc, func, inspect, or_
+from sqlalchemy import and_, desc, func, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.auth import (
@@ -47,13 +47,6 @@ from app.identity.builder import rebuild_person_identity
 from app.identity.rebuild_modes import dashboard_stale_rebuild_mode, default_manual_rebuild_mode
 from app.identity.evidence import identity_paper_overlay_days
 from app.identity.rollup import rebuild_building_persona, rebuild_organization_persona
-from app.ideas.service import allocate_idea_slug, parse_semicolon_list
-from app.ideas.suggestions import (
-    accept_idea_suggestion,
-    generate_idea_suggestions_from_content_item,
-    generate_idea_suggestions_from_persona,
-    reject_idea_suggestion,
-)
 from app.identity.staleness import (
     identity_snapshot_poll_ready,
     list_stale_persona_snapshots,
@@ -70,6 +63,8 @@ from app.ingest.ollama_client import ollama_admin_status
 from app.ingest.pipeline import refresh_html_page_content_items
 from app.ingest.poll_progress import is_poll_running, snapshot_poll, start_background_poll
 from app.ingest.urlnorm import canonical_url, origin_section_labels, UrlValidationError, url_origin_group_key
+from app.llm.prompt_registry import effective_prompt_provider, get_prompt_spec
+from app.leads.candidates import queue_recent_lead_candidates
 from app.leads.hub_corpus import hub_corpus_mark_organization_ids, hub_corpus_mark_person_ids, hub_source_ids
 from app.leads.report_pipeline import enqueue_lead_report
 from app.leads.report_progress import (
@@ -78,33 +73,13 @@ from app.leads.report_progress import (
     is_lead_report_running,
     start_background_lead_report,
 )
-from app.matching.service import (
-    create_manual_match_edge,
-    create_hypothesis_from_match,
-    create_hypothesis_for_target,
-    generate_match_rationale,
-    generate_funding_to_idea_matches,
-    generate_funding_to_organization_matches,
-    generate_funding_to_person_matches,
-    generate_idea_to_funding_matches,
-    generate_organization_to_idea_matches,
-    generate_person_to_idea_matches,
-    update_match_edge_note,
-    update_match_edge_status,
-    update_match_edge_visibility,
-)
 from app.domain.public_sources import organization_is_publicly_listable, person_is_publicly_listable
 from app.models import (
     Building,
     ContentItem,
     FundingOpportunity,
-    Idea,
-    IdeaSuggestion,
     LLMRun,
     LeadReport,
-    CollaborationHypothesis,
-    MatchEdge,
-    MatchRun,
     Organization,
     Person,
     PersonaSnapshot,
@@ -114,23 +89,12 @@ from app.models import (
     SourceSnapshot,
     person_organization as person_organization_tbl,
 )
-from app.public_feed.curate import (
-    clear_public_feed_curation,
-    count_uncurated_public_feed_candidates,
-)
-from app.public_feed.curate_progress import (
-    is_public_feed_curation_running,
-    public_feed_curation_active_run_id,
-    snapshot_public_feed_curation,
-    start_background_public_feed_curation,
-)
 from app.web.admin import admin_bp
 from app.web.admin.forms import (
     BuildingForm,
     ContentItemForm,
     FundingCsvImportForm,
     FundingOpportunityForm,
-    IdeaForm,
     LoginForm,
     OrganizationForm,
     PersonForm,
@@ -281,15 +245,15 @@ def inject_ollama_llm_sidebar():
             "ollama_llm": None,
             "openai_llm": None,
             "persona_rebuild_busy_message": "",
-            "lead_report_busy": False,
-            "active_lead_report_id": None,
+            "lead_candidate_busy": False,
+            "active_lead_candidate_id": None,
         }
     return {
         "ollama_llm": ollama_admin_status(),
         "openai_llm": openai_identity_admin_status(),
         "persona_rebuild_busy_message": persona_rebuild_busy_footer_message(),
-        "lead_report_busy": is_lead_report_running(),
-        "active_lead_report_id": active_report_id(),
+        "lead_candidate_busy": is_lead_report_running(),
+        "active_lead_candidate_id": active_report_id(),
     }
 
 
@@ -351,6 +315,7 @@ def dashboard():
                 PollLog.detail.is_(None),
                 and_(
                     ~PollLog.detail.contains("[lead-qual]"),
+                    ~PollLog.detail.contains("[lead-candidate]"),
                     ~PollLog.detail.contains("[lead-report]"),
                 ),
             )
@@ -360,6 +325,25 @@ def dashboard():
         .all()
     )
     pending_sources = Source.query.filter_by(pending=True).order_by(desc(Source.created_at)).limit(50).all()
+    funding_needs_review = (
+        FundingOpportunity.query.filter(
+            or_(
+                FundingOpportunity.is_reviewed.is_(False),
+                FundingOpportunity.synthesis_status.in_(["needs_review", "failed"]),
+                FundingOpportunity.fetch_error.isnot(None),
+            )
+        )
+        .order_by(FundingOpportunity.updated_at.desc())
+        .limit(10)
+        .all()
+    )
+    lead_candidates = _lead_candidates_filtered_query("unreviewed").limit(10).all()
+    llm_failures = (
+        LLMRun.query.filter(LLMRun.status.in_(["failed", "validation_failed"]))
+        .order_by(LLMRun.created_at.desc())
+        .limit(10)
+        .all()
+    )
     approved_poll_sources = Source.query.filter_by(pending=False, enabled=True).count()
     pending_source_count = Source.query.filter_by(pending=True).count()
     polling_hidden_sources = Source.query.filter_by(pending=False, enabled=False).count()
@@ -411,6 +395,9 @@ def dashboard():
         logs=logs,
         poll_busy=is_poll_running(),
         pending_sources=pending_sources,
+        funding_needs_review=funding_needs_review,
+        lead_candidates=lead_candidates,
+        llm_failures=llm_failures,
         approved_poll_sources=approved_poll_sources,
         pending_source_count=pending_source_count,
         polling_hidden_sources=polling_hidden_sources,
@@ -425,9 +412,7 @@ def dashboard():
 @login_required
 def settings():
     feature_flags = [
-        ("Public Ideas", current_app.config.get("SYNAPSE_PUBLIC_IDEAS_ENABLED", True), "SYNAPSE_PUBLIC_IDEAS_ENABLED"),
         ("Public Funding", current_app.config.get("SYNAPSE_PUBLIC_FUNDING_ENABLED", True), "SYNAPSE_PUBLIC_FUNDING_ENABLED"),
-        ("Matching", current_app.config.get("SYNAPSE_MATCHING_ENABLED", True), "SYNAPSE_MATCHING_ENABLED"),
         ("LLM synthesis", current_app.config.get("SYNAPSE_LLM_SYNTHESIS_ENABLED", False), "SYNAPSE_LLM_SYNTHESIS_ENABLED"),
         (
             "OpenAI escalation",
@@ -439,7 +424,6 @@ def settings():
         ("Max prompt characters", current_app.config.get("SYNAPSE_MAX_PROMPT_CHARS"), "SYNAPSE_MAX_PROMPT_CHARS"),
         ("Max source text characters", current_app.config.get("SYNAPSE_FUNDING_EXTRACT_MAX_CHARS"), "SYNAPSE_FUNDING_EXTRACT_MAX_CHARS"),
         ("Max batch size", current_app.config.get("SYNAPSE_MAX_BATCH_SIZE"), "SYNAPSE_MAX_BATCH_SIZE"),
-        ("Max matches per run", current_app.config.get("SYNAPSE_MATCH_CANDIDATE_LIMIT"), "SYNAPSE_MATCH_CANDIDATE_LIMIT"),
         ("Max LLM calls per admin action", current_app.config.get("SYNAPSE_MAX_LLM_CALLS_PER_ACTION"), "SYNAPSE_MAX_LLM_CALLS_PER_ACTION"),
         ("Retry cap", current_app.config.get("SYNAPSE_LLM_RETRY_CAP"), "SYNAPSE_LLM_RETRY_CAP"),
         ("LLM timeout seconds", current_app.config.get("SYNAPSE_LLM_TIMEOUT_SEC"), "SYNAPSE_LLM_TIMEOUT_SEC"),
@@ -447,10 +431,8 @@ def settings():
         ("Funding fetch max bytes", current_app.config.get("SYNAPSE_FUNDING_FETCH_MAX_BYTES"), "SYNAPSE_FUNDING_FETCH_MAX_BYTES"),
     ]
     provider_policy = [
-        ("Funding provider", os.environ.get("SYNAPSE_LLM_FUNDING_PROVIDER", "ollama")),
-        ("Idea provider", os.environ.get("SYNAPSE_LLM_IDEA_PROVIDER", "ollama")),
-        ("Matching provider", os.environ.get("SYNAPSE_LLM_MATCH_PROVIDER", "ollama")),
-        ("Hypothesis provider", os.environ.get("SYNAPSE_LLM_HYPOTHESIS_PROVIDER", "openai")),
+        _prompt_provider_policy_row("funding_extract", "Funding extraction"),
+        _prompt_provider_policy_row("funding_public_card", "Funding public card"),
         ("OpenAI fallback allowed", "yes" if _truthy_env("SYNAPSE_OPENAI_ESCALATION_ENABLED") else "no"),
         (
             "OpenAI requires confirmation",
@@ -469,43 +451,24 @@ def settings():
     )
 
 
+def _prompt_provider_policy_row(prompt_name: str, label: str) -> tuple[str, str]:
+    spec = get_prompt_spec(prompt_name)
+    effective = effective_prompt_provider(prompt_name)
+    env_name = "SYNAPSE_LLM_" + prompt_name.upper() + "_PROVIDER"
+    if effective == spec.default_provider:
+        detail = f"{effective} (default"
+    else:
+        detail = f"{effective} (env override; default {spec.default_provider}"
+    if spec.fallback_provider:
+        detail += f", fallback {spec.fallback_provider}"
+    detail += f"; {env_name})"
+    return label, detail
+
+
 @admin_bp.route("/review")
 @login_required
 def review_queue():
-    funding_needs_review = (
-        FundingOpportunity.query.filter(
-            or_(
-                FundingOpportunity.is_reviewed.is_(False),
-                FundingOpportunity.synthesis_status.in_(["needs_review", "failed"]),
-                FundingOpportunity.fetch_error.isnot(None),
-            )
-        )
-        .order_by(FundingOpportunity.updated_at.desc())
-        .limit(25)
-        .all()
-    )
-    idea_suggestions = IdeaSuggestion.query.filter_by(status="pending").order_by(IdeaSuggestion.created_at.desc()).limit(25).all()
-    match_edges = MatchEdge.query.filter_by(status="needs_review").order_by(MatchEdge.updated_at.desc()).limit(25).all()
-    hypotheses = (
-        CollaborationHypothesis.query.filter(CollaborationHypothesis.status.in_(["draft", "needs_review"]))
-        .order_by(CollaborationHypothesis.updated_at.desc())
-        .limit(25)
-        .all()
-    )
-    llm_failures = (
-        LLMRun.query.filter(LLMRun.status.in_(["failed", "validation_failed"]))
-        .order_by(LLMRun.created_at.desc())
-        .limit(25)
-        .all()
-    )
-    return render_template(
-        "admin/review.html",
-        funding_needs_review=funding_needs_review,
-        idea_suggestions=idea_suggestions,
-        match_edges=match_edges,
-        hypotheses=hypotheses,
-        llm_failures=llm_failures,
-    )
+    return redirect(url_for("admin.dashboard"))
 
 
 @admin_bp.route("/poll-status")
@@ -1223,7 +1186,7 @@ def people_delete(pid: int):
         flash("Detach or reassign this person’s owned sources before deleting.", "error")
         return redirect(url_for("admin.people_edit", pid=pid))
     if LeadReport.query.filter_by(target_person_id=pid).first():
-        flash("Delete lead reports referencing this person first.", "error")
+        flash("Delete lead candidates referencing this person first.", "error")
         return redirect(url_for("admin.people_edit", pid=pid))
     db.session.delete(ent)
     db.session.commit()
@@ -1458,10 +1421,10 @@ def organizations_delete(oid: int):
         flash("Detach org-owned sources first.", "error")
         return redirect(url_for("admin.organizations_edit", oid=oid))
     if LeadReport.query.filter_by(target_organization_id=oid).first():
-        flash("Delete lead reports targeting this organization first.", "error")
+        flash("Delete lead candidates targeting this organization first.", "error")
         return redirect(url_for("admin.organizations_edit", oid=oid))
     if LeadReport.query.filter_by(hub_organization_id=oid).first():
-        flash("Delete or reassign lead reports referencing this organization as Hub before deleting.", "error")
+        flash("Delete or reassign lead candidates referencing this organization as Hub before deleting.", "error")
         return redirect(url_for("admin.organizations_edit", oid=oid))
     db.session.delete(org)
     db.session.commit()
@@ -1692,6 +1655,22 @@ def funding_review(funding_id: int):
     return redirect(_safe_admin_redirect_target() or url_for("admin.funding_detail", funding_id=funding.id))
 
 
+@admin_bp.route("/funding/<int:funding_id>/publish", methods=("POST",))
+@login_required
+def funding_publish(funding_id: int):
+    funding = db.session.get(FundingOpportunity, funding_id)
+    if funding is None:
+        abort(404)
+    funding.is_reviewed = True
+    funding.is_public = True
+    if funding.status == "draft":
+        funding.status = "active"
+    funding.reviewed_at = funding.reviewed_at or datetime.now(timezone.utc)
+    db.session.commit()
+    flash("Funding opportunity published.", "success")
+    return redirect(_safe_admin_redirect_target() or url_for("admin.funding_detail", funding_id=funding.id))
+
+
 @admin_bp.route("/funding/<int:funding_id>/effort/rebuild", methods=("POST",))
 @login_required
 def funding_effort_rebuild(funding_id: int):
@@ -1851,526 +1830,34 @@ def funding_archive(funding_id: int):
     return redirect(url_for("admin.funding_detail", funding_id=funding.id))
 
 
-# --- Ideas ---
-
-
-def _idea_form_keywords(form: IdeaForm, idea: Idea | None = None):
-    return {"form": form, "idea": idea}
-
-
-def _populate_idea_form(form: IdeaForm, idea: Idea) -> None:
-    form.title.data = idea.title
-    form.idea_type.data = idea.idea_type or "unknown"
-    form.status.data = idea.status or "draft"
-    form.is_public.data = bool(idea.is_public)
-    form.is_reviewed.data = bool(idea.is_reviewed)
-    form.short_description.data = idea.short_description or ""
-    form.public_summary.data = idea.public_summary or ""
-    form.private_summary.data = idea.private_summary or ""
-    form.hub_relevance.data = idea.hub_relevance or ""
-    form.buildable_angle.data = idea.buildable_angle or ""
-    form.funding_angle.data = idea.funding_angle or ""
-    form.tags.data = "; ".join(idea.tags_json or [])
-    form.aliases.data = "; ".join(idea.aliases_json or [])
-    form.hub_capabilities.data = "; ".join(idea.hub_capabilities_json or [])
-    form.evidence_refs.data = "\n".join(idea.evidence_refs_json or [])
-    form.quality_flags.data = "; ".join(idea.quality_flags_json or [])
-    form.confidence_score.data = idea.confidence_score
-    form.created_via.data = idea.created_via or "manual"
-
-
-def _apply_idea_form(form: IdeaForm, idea: Idea) -> None:
-    title = (form.title.data or "").strip()
-    idea.title = title
-    idea.slug = allocate_idea_slug(title, exclude_id=idea.id)
-    idea.idea_type = form.idea_type.data or "unknown"
-    idea.status = form.status.data or "draft"
-    idea.is_public = bool(form.is_public.data)
-    was_reviewed = bool(idea.is_reviewed)
-    idea.is_reviewed = bool(form.is_reviewed.data)
-    if idea.is_reviewed and not was_reviewed:
-        idea.reviewed_at = datetime.now(timezone.utc)
-    if not idea.is_reviewed:
-        idea.reviewed_at = None
-    if idea.status == "public":
-        idea.is_public = True
-    if idea.status in {"archived", "hidden", "merged", "private"}:
-        idea.is_public = False
-    idea.short_description = (form.short_description.data or "").strip() or None
-    idea.public_summary = (form.public_summary.data or "").strip() or None
-    idea.private_summary = (form.private_summary.data or "").strip() or None
-    idea.hub_relevance = (form.hub_relevance.data or "").strip() or None
-    idea.buildable_angle = (form.buildable_angle.data or "").strip() or None
-    idea.funding_angle = (form.funding_angle.data or "").strip() or None
-    idea.tags_json = parse_semicolon_list(form.tags.data)
-    idea.aliases_json = parse_semicolon_list(form.aliases.data)
-    idea.hub_capabilities_json = parse_semicolon_list(form.hub_capabilities.data)
-    idea.evidence_refs_json = [line.strip() for line in (form.evidence_refs.data or "").splitlines() if line.strip()]
-    idea.quality_flags_json = parse_semicolon_list(form.quality_flags.data)
-    idea.confidence_score = form.confidence_score.data
-    idea.created_via = form.created_via.data or "manual"
-
-
-@admin_bp.route("/ideas")
-@admin_bp.route("/ideas/")
-@login_required
-def ideas_list():
-    query = Idea.query
-    status = (request.args.get("status") or "").strip()
-    idea_type = (request.args.get("idea_type") or "").strip()
-    visibility = (request.args.get("visibility") or "").strip()
-    if status:
-        query = query.filter(Idea.status == status)
-    if idea_type:
-        query = query.filter(Idea.idea_type == idea_type)
-    if visibility == "public":
-        query = query.filter(Idea.is_public.is_(True))
-    elif visibility == "private":
-        query = query.filter(Idea.is_public.is_(False))
-    rows = query.order_by(Idea.updated_at.desc(), Idea.id.desc()).all()
-    return render_template(
-        "admin/ideas/list.html",
-        rows=rows,
-        selected_status=status,
-        selected_idea_type=idea_type,
-        selected_visibility=visibility,
-    )
-
-
-@admin_bp.route("/ideas/suggestions")
-@login_required
-def ideas_suggestions():
-    status = (request.args.get("status") or "pending").strip()
-    query = IdeaSuggestion.query
-    if status:
-        query = query.filter(IdeaSuggestion.status == status)
-    suggestions = query.order_by(IdeaSuggestion.created_at.desc(), IdeaSuggestion.id.desc()).limit(100).all()
-    personas = PersonaSnapshot.query.order_by(PersonaSnapshot.updated_at.desc(), PersonaSnapshot.id.desc()).limit(100).all()
-    content_items = ContentItem.query.order_by(ContentItem.first_seen_at.desc(), ContentItem.id.desc()).limit(100).all()
-    return render_template(
-        "admin/ideas/suggestions.html",
-        suggestions=suggestions,
-        personas=personas,
-        content_items=content_items,
-        selected_status=status,
-    )
-
-
-@admin_bp.route("/ideas/suggestions/generate/persona/<int:snapshot_id>", methods=("POST",))
-@login_required
-def ideas_suggestions_generate_persona(snapshot_id: int):
-    snapshot = db.session.get(PersonaSnapshot, snapshot_id)
-    if snapshot is None:
-        abort(404)
-    result = generate_idea_suggestions_from_persona(
-        snapshot,
-        provider=(request.form.get("provider") or None),
-        allow_openai=(request.form.get("allow_openai") == "1"),
-    )
-    if result.ok:
-        flash("Idea suggestions generated.", "success")
-    else:
-        flash("; ".join(result.errors) or "Idea suggestion generation failed.", "error")
-    return redirect(url_for("admin.ideas_suggestions"))
-
-
-@admin_bp.route("/ideas/suggestions/generate/content-item/<int:content_item_id>", methods=("POST",))
-@login_required
-def ideas_suggestions_generate_content_item(content_item_id: int):
-    try:
-        result = generate_idea_suggestions_from_content_item(
-            content_item_id,
-            provider=(request.form.get("provider") or None),
-            allow_openai=(request.form.get("allow_openai") == "1"),
-        )
-    except ValueError as exc:
-        flash(str(exc), "error")
-        return redirect(url_for("admin.ideas_suggestions"))
-    if result.ok:
-        flash("Content item Idea suggestions generated.", "success")
-    else:
-        flash("; ".join(result.errors) or "Content item Idea suggestion generation failed.", "error")
-    return redirect(url_for("admin.ideas_suggestions"))
-
-
-@admin_bp.route("/ideas/suggestions/<int:suggestion_id>/<action>", methods=("POST",))
-@login_required
-def ideas_suggestion_action(suggestion_id: int, action: str):
-    suggestion = db.session.get(IdeaSuggestion, suggestion_id)
-    if suggestion is None:
-        abort(404)
-    if action == "accept":
-        idea = accept_idea_suggestion(suggestion)
-        flash("Idea suggestion accepted.", "success")
-        return redirect(url_for("admin.ideas_detail", idea_id=idea.id))
-    if action == "reject":
-        reject_idea_suggestion(suggestion)
-        flash("Idea suggestion rejected.", "info")
-        return redirect(url_for("admin.ideas_suggestions"))
-    abort(404)
-
-
-@admin_bp.route("/ideas/new", methods=("GET", "POST"))
-@login_required
-def ideas_new():
-    form = IdeaForm()
-    if form.validate_on_submit():
-        idea = Idea(slug="pending", title=(form.title.data or "").strip())
-        _apply_idea_form(form, idea)
-        db.session.add(idea)
-        db.session.commit()
-        flash("Idea created.", "success")
-        return redirect(url_for("admin.ideas_detail", idea_id=idea.id))
-    form.idea_type.data = "unknown"
-    form.status.data = "draft"
-    form.created_via.data = "manual"
-    return render_template("admin/ideas/form.html", **_idea_form_keywords(form, None))
-
-
-@admin_bp.route("/ideas/<int:idea_id>")
-@login_required
-def ideas_detail(idea_id: int):
-    idea = db.session.get(Idea, idea_id)
-    if idea is None:
-        abort(404)
-    return render_template("admin/ideas/detail.html", idea=idea)
-
-
-@admin_bp.route("/ideas/<int:idea_id>/edit", methods=("GET", "POST"))
-@login_required
-def ideas_edit(idea_id: int):
-    idea = db.session.get(Idea, idea_id)
-    if idea is None:
-        abort(404)
-    form = IdeaForm(obj=idea)
-    if request.method == "GET":
-        _populate_idea_form(form, idea)
-    if form.validate_on_submit():
-        _apply_idea_form(form, idea)
-        db.session.commit()
-        flash("Idea saved.", "success")
-        return redirect(url_for("admin.ideas_detail", idea_id=idea.id))
-    return render_template("admin/ideas/form.html", **_idea_form_keywords(form, idea))
-
-
-@admin_bp.route("/ideas/<int:idea_id>/review", methods=("POST",))
-@login_required
-def ideas_review(idea_id: int):
-    idea = db.session.get(Idea, idea_id)
-    if idea is None:
-        abort(404)
-    idea.is_reviewed = True
-    idea.reviewed_at = datetime.now(timezone.utc)
-    db.session.commit()
-    flash("Idea marked reviewed.", "success")
-    return redirect(_safe_admin_redirect_target() or url_for("admin.ideas_detail", idea_id=idea.id))
-
-
-@admin_bp.route("/ideas/<int:idea_id>/archive", methods=("POST",))
-@login_required
-def ideas_archive(idea_id: int):
-    idea = db.session.get(Idea, idea_id)
-    if idea is None:
-        abort(404)
-    idea.status = "archived"
-    idea.is_public = False
-    idea.archived_at = datetime.now(timezone.utc)
-    db.session.commit()
-    flash("Idea archived.", "info")
-    return redirect(url_for("admin.ideas_detail", idea_id=idea.id))
-
-
-# --- Matching ---
-
-
-def _match_edge_entity_label(edge: MatchEdge) -> tuple[str, str]:
-    source_label = _entity_label(edge.source_type, edge.source_id)
-    target_label = _entity_label(edge.target_type, edge.target_id)
-    return source_label, target_label
-
-
-def _entity_label(entity_type: str, entity_id: int) -> str:
-    if entity_type == "funding":
-        row = db.session.get(FundingOpportunity, entity_id)
-        return row.title if row is not None else f"Funding #{entity_id}"
-    if entity_type == "idea":
-        row = db.session.get(Idea, entity_id)
-        return row.title if row is not None else f"Idea #{entity_id}"
-    if entity_type == "person":
-        row = db.session.get(Person, entity_id)
-        return row.display_name if row is not None else f"Person #{entity_id}"
-    if entity_type == "organization":
-        row = db.session.get(Organization, entity_id)
-        return row.display_name if row is not None else f"Organization #{entity_id}"
-    if entity_type == "building":
-        row = db.session.get(Building, entity_id)
-        return (row.place_name or row.display_name) if row is not None else f"Building #{entity_id}"
-    return f"{entity_type} #{entity_id}"
+# --- Retired relationship routes ---
 
 
 @admin_bp.route("/matching")
 @admin_bp.route("/matching/")
-@login_required
-def matching_dashboard():
-    if not current_app.config.get("SYNAPSE_MATCHING_ENABLED", True):
-        abort(404)
-    status = (request.args.get("status") or "").strip()
-    query = MatchEdge.query
-    if status:
-        query = query.filter(MatchEdge.status == status)
-    edges = query.order_by(MatchEdge.score_total.desc().nullslast(), MatchEdge.updated_at.desc()).limit(100).all()
-    runs = MatchRun.query.order_by(MatchRun.created_at.desc()).limit(10).all()
-    hypotheses = CollaborationHypothesis.query.order_by(CollaborationHypothesis.updated_at.desc()).limit(20).all()
-    funding_rows = FundingOpportunity.query.filter(FundingOpportunity.status != "archived").order_by(FundingOpportunity.title.asc()).all()
-    idea_rows = Idea.query.filter(Idea.status != "archived").order_by(Idea.title.asc()).all()
-    person_rows = Person.query.order_by(Person.display_name.asc()).limit(200).all()
-    organization_rows = Organization.query.order_by(Organization.display_name.asc()).limit(200).all()
-    edge_labels = {edge.id: _match_edge_entity_label(edge) for edge in edges}
-    hypothesis_labels = {hyp.id: _entity_label(hyp.target_type, hyp.target_id) for hyp in hypotheses}
-    entity_options = {
-        "idea": [{"id": row.id, "label": row.title} for row in idea_rows],
-        "funding": [{"id": row.id, "label": row.title} for row in funding_rows],
-        "person": [{"id": row.id, "label": row.display_name} for row in person_rows],
-        "organization": [{"id": row.id, "label": row.display_name} for row in organization_rows],
-    }
-    return render_template(
-        "admin/matching/dashboard.html",
-        edges=edges,
-        runs=runs,
-        hypotheses=hypotheses,
-        funding_rows=funding_rows,
-        idea_rows=idea_rows,
-        person_rows=person_rows,
-        organization_rows=organization_rows,
-        edge_labels=edge_labels,
-        hypothesis_labels=hypothesis_labels,
-        entity_options=entity_options,
-        selected_status=status,
-    )
-
-
-@admin_bp.route("/matching/generate/funding/<int:funding_id>", methods=("POST",))
-@login_required
-def matching_generate_funding(funding_id: int):
-    funding = db.session.get(FundingOpportunity, funding_id)
-    if funding is None:
-        abort(404)
-    run = generate_funding_to_idea_matches(
-        funding,
-        candidate_limit=int(current_app.config.get("SYNAPSE_MATCH_CANDIDATE_LIMIT", 100)),
-        min_score=float(current_app.config.get("SYNAPSE_MATCH_MIN_SCORE", 0.35)),
-    )
-    flash(f"Generated funding-to-idea matches: {run.scored_count} scored.", "success")
-    return redirect(_safe_admin_redirect_target() or url_for("admin.matching_dashboard"))
-
-
-@admin_bp.route("/matching/generate/idea/<int:idea_id>", methods=("POST",))
-@login_required
-def matching_generate_idea(idea_id: int):
-    idea = db.session.get(Idea, idea_id)
-    if idea is None:
-        abort(404)
-    run = generate_idea_to_funding_matches(
-        idea,
-        candidate_limit=int(current_app.config.get("SYNAPSE_MATCH_CANDIDATE_LIMIT", 100)),
-        min_score=float(current_app.config.get("SYNAPSE_MATCH_MIN_SCORE", 0.35)),
-    )
-    flash(f"Generated idea-to-funding matches: {run.scored_count} scored.", "success")
-    return redirect(_safe_admin_redirect_target() or url_for("admin.matching_dashboard"))
-
-
-@admin_bp.route("/matching/generate/person/<int:person_id>", methods=("POST",))
-@login_required
-def matching_generate_person(person_id: int):
-    person = db.session.get(Person, person_id)
-    if person is None:
-        abort(404)
-    run = generate_person_to_idea_matches(person, candidate_limit=int(current_app.config.get("SYNAPSE_MATCH_CANDIDATE_LIMIT", 100)))
-    flash(f"Generated person-to-idea matches: {run.scored_count} scored.", "success")
-    return redirect(_safe_admin_redirect_target() or url_for("admin.matching_dashboard"))
-
-
-@admin_bp.route("/matching/generate/organization/<int:organization_id>", methods=("POST",))
-@login_required
-def matching_generate_organization(organization_id: int):
-    organization = db.session.get(Organization, organization_id)
-    if organization is None:
-        abort(404)
-    run = generate_organization_to_idea_matches(
-        organization, candidate_limit=int(current_app.config.get("SYNAPSE_MATCH_CANDIDATE_LIMIT", 100))
-    )
-    flash(f"Generated organization-to-idea matches: {run.scored_count} scored.", "success")
-    return redirect(_safe_admin_redirect_target() or url_for("admin.matching_dashboard"))
-
-
-@admin_bp.route("/matching/generate/funding/<int:funding_id>/entities", methods=("POST",))
-@login_required
-def matching_generate_funding_entities(funding_id: int):
-    funding = db.session.get(FundingOpportunity, funding_id)
-    if funding is None:
-        abort(404)
-    people_run = generate_funding_to_person_matches(funding)
-    org_run = generate_funding_to_organization_matches(funding)
-    flash(f"Generated funding entity matches: {people_run.scored_count + org_run.scored_count} scored.", "success")
-    return redirect(_safe_admin_redirect_target() or url_for("admin.matching_dashboard"))
-
-
+@admin_bp.route("/hypotheses")
+@admin_bp.route("/hypotheses/")
+@admin_bp.route("/matching/generate/funding/<int:_funding_id>", methods=("POST",))
+@admin_bp.route("/matching/generate/idea/<int:_retired_id>", methods=("POST",))
+@admin_bp.route("/matching/generate/person/<int:_person_id>", methods=("POST",))
+@admin_bp.route("/matching/generate/organization/<int:_organization_id>", methods=("POST",))
+@admin_bp.route("/matching/generate/funding/<int:_funding_id>/entities", methods=("POST",))
 @admin_bp.route("/matching/manual", methods=("POST",))
-@login_required
-def matching_manual_edge():
-    source_type = (request.form.get("source_type") or "").strip()
-    target_type = (request.form.get("target_type") or "").strip()
-    source_id = int(request.form.get("source_id") or 0)
-    target_id = int(request.form.get("target_id") or 0)
-    match_type = (request.form.get("match_type") or f"{source_type}_to_{target_type}").strip()
-    visibility = (request.form.get("visibility") or "private").strip()
-    rationale = (request.form.get("rationale") or "").strip() or None
-    create_manual_match_edge(
-        source_type=source_type,
-        source_id=source_id,
-        target_type=target_type,
-        target_id=target_id,
-        match_type=match_type,
-        visibility=visibility,
-        rationale=rationale,
-    )
-    flash("Manual relationship saved.", "success")
-    return redirect(url_for("admin.matching_dashboard"))
-
-
-@admin_bp.route("/matching/edges/<int:edge_id>")
-@login_required
-def matching_edge_detail(edge_id: int):
-    edge = db.session.get(MatchEdge, edge_id)
-    if edge is None:
-        abort(404)
-    llm_run = None
-    if edge.synthesized_json and edge.synthesized_json.get("llm_run_id"):
-        llm_run = db.session.get(LLMRun, edge.synthesized_json.get("llm_run_id"))
-    return render_template(
-        "admin/matching/edge_detail.html",
-        edge=edge,
-        labels=_match_edge_entity_label(edge),
-        llm_run=llm_run,
-    )
-
-
-@admin_bp.route("/matching/edges/<int:edge_id>/<action>", methods=("POST",))
-@login_required
-def matching_edge_action(edge_id: int, action: str):
-    edge = db.session.get(MatchEdge, edge_id)
-    if edge is None:
-        abort(404)
-    if action not in {"accept", "reject", "archive", "private", "public_safe"}:
-        abort(404)
-    if action == "accept":
-        update_match_edge_status(edge, "accepted")
-    elif action == "reject":
-        update_match_edge_status(edge, "rejected")
-    elif action == "archive":
-        update_match_edge_status(edge, "archived")
-        update_match_edge_visibility(edge, "hidden")
-    elif action == "private":
-        update_match_edge_visibility(edge, "private")
-    elif action == "public_safe":
-        update_match_edge_visibility(edge, "public_safe")
-    flash("Match updated.", "success")
-    return redirect(_safe_admin_redirect_target() or url_for("admin.matching_dashboard"))
-
-
-@admin_bp.route("/matching/edges/<int:edge_id>/note", methods=("POST",))
-@login_required
-def matching_edge_note(edge_id: int):
-    edge = db.session.get(MatchEdge, edge_id)
-    if edge is None:
-        abort(404)
-    update_match_edge_note(
-        edge,
-        private_rationale=request.form.get("private_rationale"),
-        public_rationale=request.form.get("public_rationale"),
-    )
-    flash("Match rationale saved.", "success")
-    return redirect(url_for("admin.matching_edge_detail", edge_id=edge.id))
-
-
-@admin_bp.route("/matching/edges/<int:edge_id>/generate-rationale", methods=("POST",))
-@login_required
-def matching_edge_generate_rationale(edge_id: int):
-    edge = db.session.get(MatchEdge, edge_id)
-    if edge is None:
-        abort(404)
-    result = generate_match_rationale(
-        edge,
-        provider=(request.form.get("provider") or None),
-        allow_openai=(request.form.get("allow_openai") == "1"),
-    )
-    if result.ok:
-        flash("Match rationale generated.", "success")
-    else:
-        flash("; ".join(result.errors) or "Match rationale generation failed.", "error")
-    return redirect(url_for("admin.matching_edge_detail", edge_id=edge.id))
-
-
-@admin_bp.route("/matching/edges/<int:edge_id>/hypothesis", methods=("POST",))
-@login_required
-def matching_create_hypothesis(edge_id: int):
-    edge = db.session.get(MatchEdge, edge_id)
-    if edge is None:
-        abort(404)
-    hypothesis = create_hypothesis_from_match(edge)
-    flash("Collaboration hypothesis created.", "success")
-    return redirect(url_for("admin.matching_hypothesis_detail", hypothesis_id=hypothesis.id))
-
-
+@admin_bp.route("/matching/edges/<int:_edge_id>")
+@admin_bp.route("/matching/edges/<int:_edge_id>/<action>", methods=("POST",))
+@admin_bp.route("/matching/edges/<int:_edge_id>/note", methods=("POST",))
+@admin_bp.route("/matching/edges/<int:_edge_id>/generate-rationale", methods=("POST",))
+@admin_bp.route("/matching/edges/<int:_edge_id>/hypothesis", methods=("POST",))
 @admin_bp.route("/matching/hypotheses/generate-target", methods=("POST",))
+@admin_bp.route("/hypotheses/<int:_hypothesis_id>")
+@admin_bp.route("/matching/hypotheses/<int:_hypothesis_id>")
+@admin_bp.route("/hypotheses/<int:_hypothesis_id>/edit", methods=("POST",))
+@admin_bp.route("/matching/hypotheses/<int:_hypothesis_id>/edit", methods=("POST",))
+@admin_bp.route("/hypotheses/<int:_hypothesis_id>/<action>", methods=("POST",))
+@admin_bp.route("/matching/hypotheses/<int:_hypothesis_id>/<action>", methods=("POST",))
 @login_required
-def matching_generate_target_hypothesis():
-    target_type = (request.form.get("target_type") or "").strip()
-    target_id = int(request.form.get("target_id") or 0)
-    try:
-        hypothesis = create_hypothesis_for_target(target_type, target_id)
-    except ValueError as exc:
-        flash(str(exc), "error")
-        return redirect(url_for("admin.matching_dashboard"))
-    flash("Target-centered collaboration hypothesis created.", "success")
-    return redirect(url_for("admin.matching_hypothesis_detail", hypothesis_id=hypothesis.id))
-
-
-@admin_bp.route("/matching/hypotheses/<int:hypothesis_id>")
-@login_required
-def matching_hypothesis_detail(hypothesis_id: int):
-    hypothesis = db.session.get(CollaborationHypothesis, hypothesis_id)
-    if hypothesis is None:
-        abort(404)
-    return render_template(
-        "admin/matching/hypothesis_detail.html",
-        hypothesis=hypothesis,
-        target_label=_entity_label(hypothesis.target_type, hypothesis.target_id),
-    )
-
-
-@admin_bp.route("/matching/hypotheses/<int:hypothesis_id>/<action>", methods=("POST",))
-@login_required
-def matching_hypothesis_action(hypothesis_id: int, action: str):
-    hypothesis = db.session.get(CollaborationHypothesis, hypothesis_id)
-    if hypothesis is None:
-        abort(404)
-    if action not in {"review", "active", "dismiss", "archive"}:
-        abort(404)
-    if action == "review":
-        hypothesis.status = "reviewed"
-        hypothesis.reviewed_at = datetime.now(timezone.utc)
-    elif action == "active":
-        hypothesis.status = "active"
-        hypothesis.reviewed_at = hypothesis.reviewed_at or datetime.now(timezone.utc)
-    elif action == "dismiss":
-        hypothesis.status = "dismissed"
-    elif action == "archive":
-        hypothesis.status = "archived"
-        hypothesis.archived_at = datetime.now(timezone.utc)
-    db.session.commit()
-    flash("Collaboration hypothesis updated.", "success")
-    return redirect(url_for("admin.matching_hypothesis_detail", hypothesis_id=hypothesis.id))
+def retired_relationship_routes(**_kwargs):
+    abort(410)
 
 
 # --- Places: buildings & regions ---
@@ -2585,7 +2072,7 @@ def buildings_delete(bid: int):
         flash("Reassign or clear organizations linked to this building first.", "error")
         return redirect(url_for("admin.buildings_view", bid=bid))
     if LeadReport.query.filter_by(target_building_id=bid).first():
-        flash("Delete lead reports targeting this building first.", "error")
+        flash("Delete lead candidates targeting this building first.", "error")
         return redirect(url_for("admin.buildings_view", bid=bid))
     db.session.delete(pl)
     db.session.commit()
@@ -2667,7 +2154,7 @@ def regions_delete(rid: int):
         flash("Clear region assignment from buildings that reference this region first.", "error")
         return redirect(url_for("admin.regions_view", rid=rid))
     if LeadReport.query.filter_by(target_region_id=rid).first():
-        flash("Delete lead reports targeting this region first.", "error")
+        flash("Delete lead candidates targeting this region first.", "error")
         return redirect(url_for("admin.regions_view", rid=rid))
     db.session.delete(reg)
     db.session.commit()
@@ -2678,7 +2165,7 @@ def regions_delete(rid: int):
 # --- Leads ---
 
 
-def _lead_report_subject_label(r: LeadReport) -> str:
+def _lead_candidate_subject_label(r: LeadReport) -> str:
     if r.target_person_id and r.target_person:
         return f"Person · {r.target_person.display_name}"
     if r.target_organization_id and r.target_organization:
@@ -2691,7 +2178,7 @@ def _lead_report_subject_label(r: LeadReport) -> str:
     return "—"
 
 
-def _lead_reports_filtered_query(review: str | None):
+def _lead_candidates_filtered_query(review: str | None):
     q = (
         LeadReport.query.options(
             joinedload(LeadReport.target_person),
@@ -2712,35 +2199,36 @@ def _lead_reports_filtered_query(review: str | None):
 @admin_bp.route("/leads")
 @login_required
 def leads_list():
-    report_review = (request.args.get("report_review") or "").strip().lower()
-    if report_review not in ("", "unreviewed", "reviewed"):
-        report_review = ""
-    report_rows = _lead_reports_filtered_query(report_review or None).limit(100).all()
+    candidate_review = (request.args.get("candidate_review") or "").strip().lower()
+    if candidate_review not in ("", "unreviewed", "reviewed"):
+        candidate_review = ""
+    candidate_rows = _lead_candidates_filtered_query(candidate_review or None).limit(100).all()
 
     report_logs = (
-        PollLog.query.filter(PollLog.detail.contains("[lead-report]")).order_by(desc(PollLog.ran_at)).limit(25).all()
+        PollLog.query.filter(PollLog.detail.contains("[lead-candidate]")).order_by(desc(PollLog.ran_at)).limit(25).all()
     )
     people = Person.query.order_by(Person.display_name.asc()).all()
     orgs = Organization.query.order_by(Organization.display_name.asc()).all()
     buildings = Building.query.order_by(Building.place_name.asc()).all()
     regions = Region.query.order_by(Region.region_name.asc()).all()
-    open_report_modal = (request.args.get("open_report_modal") or "").strip().lower() in ("1", "true", "yes")
+    open_candidate_modal = (request.args.get("open_candidate_modal") or "").strip().lower() in ("1", "true", "yes")
     return render_template(
         "admin/leads_list.html",
         report_logs=report_logs,
-        report_rows=report_rows,
-        report_review_filter=report_review,
+        candidate_rows=candidate_rows,
+        candidate_review_filter=candidate_review,
         people=people,
         organizations=orgs,
         buildings=buildings,
         regions=regions,
-        open_report_modal=open_report_modal,
-        lead_report_phase=active_report_phase(),
+        open_candidate_modal=open_candidate_modal,
+        lead_candidate_phase=active_report_phase(),
     )
 
 
 
 @admin_bp.route("/leads/report-run-status")
+@admin_bp.route("/leads/candidate-run-status")
 @login_required
 def lead_report_run_status():
     return jsonify(
@@ -2750,14 +2238,29 @@ def lead_report_run_status():
     )
 
 
-@admin_bp.route("/leads/reports/new", methods=("GET", "POST"))
+@admin_bp.route("/leads/candidates/generate-recent", methods=("POST",))
+@login_required
+def lead_candidates_generate_recent():
+    try:
+        limit = int(request.form.get("limit") or 8)
+    except ValueError:
+        limit = 8
+    result = queue_recent_lead_candidates(limit=max(1, min(limit, 25)), run_now=False)
+    if result.queued_ids:
+        flash(f"Queued {len(result.queued_ids)} recent-content lead candidate(s).", "success")
+    else:
+        flash("No new recent-content lead candidates were queued.", "info")
+    return redirect(url_for("admin.leads_list"))
+
+
+@admin_bp.route("/leads/candidates/new", methods=("GET", "POST"))
 @login_required
 def lead_reports_new():
     if request.method == "GET":
-        return redirect(url_for("admin.leads_list", open_report_modal=1))
+        return redirect(url_for("admin.leads_list", open_candidate_modal=1))
 
     if is_lead_report_running():
-        flash("A lead report job is already running — wait for it to finish.", "error")
+        flash("A lead candidate job is already running. Wait for it to finish.", "error")
         return redirect(url_for("admin.leads_list"))
 
     sk = (request.form.get("subject_kind") or "").strip().lower()
@@ -2806,21 +2309,21 @@ def lead_reports_new():
             )
         else:
             flash("Pick subject type and a matching entity.", "error")
-            return redirect(url_for("admin.leads_list", open_report_modal=1))
+            return redirect(url_for("admin.leads_list", open_candidate_modal=1))
 
         db.session.commit()
         started, err = start_background_lead_report(current_app._get_current_object(), row.id)
         if started:
-            return redirect(f"{url_for('admin.leads_list')}#lead-reports-section")
-        flash(f"Report recorded but runner did not start: {err}", "error")
+            return redirect(f"{url_for('admin.leads_list')}#lead-candidates-section")
+        flash(f"Lead candidate recorded but runner did not start: {err}", "error")
         return redirect(url_for("admin.leads_list"))
     except ValueError as e:
         db.session.rollback()
         flash(str(e), "error")
-        return redirect(url_for("admin.leads_list", open_report_modal=1))
+        return redirect(url_for("admin.leads_list", open_candidate_modal=1))
 
 
-@admin_bp.route("/leads/reports/<int:rid>")
+@admin_bp.route("/leads/candidates/<int:rid>")
 @login_required
 def lead_reports_view(rid: int):
     rpt = (
@@ -2851,15 +2354,15 @@ def lead_reports_view(rid: int):
         except (json.JSONDecodeError, TypeError):
             ranked = []
     return render_template(
-        "admin/lead_report_detail.html",
+        "admin/lead_candidate_detail.html",
         report=rpt,
-        subject_label=_lead_report_subject_label(rpt),
+        subject_label=_lead_candidate_subject_label(rpt),
         collaboration_routes=collab,
         ranked_contacts=ranked,
     )
 
 
-@admin_bp.route("/leads/reports/<int:rid>/review", methods=("POST",))
+@admin_bp.route("/leads/candidates/<int:rid>/review", methods=("POST",))
 @login_required
 def lead_reports_review(rid: int):
     rpt = db.session.get(LeadReport, int(rid))
@@ -2871,7 +2374,7 @@ def lead_reports_review(rid: int):
     else:
         if rpt.status in ("queued", "running"):
             flash(
-                "You can mark a report as reviewed only after it has finished (status ok or failed).",
+                "You can mark a lead candidate reviewed only after it has finished.",
                 "error",
             )
             return redirect(url_for("admin.lead_reports_view", rid=rid))
@@ -2885,18 +2388,18 @@ def lead_reports_review(rid: int):
     return redirect(url_for("admin.lead_reports_view", rid=rid))
 
 
-@admin_bp.route("/leads/reports/<int:rid>/delete", methods=("POST",))
+@admin_bp.route("/leads/candidates/<int:rid>/delete", methods=("POST",))
 @login_required
 def lead_reports_delete(rid: int):
     rpt = db.session.get(LeadReport, int(rid))
     if rpt is None:
         abort(404)
     if is_lead_report_running() and active_report_id() == int(rid):
-        flash("Cannot delete a report while it is running.", "error")
+        flash("Cannot delete a lead candidate while it is running.", "error")
         return redirect(url_for("admin.lead_reports_view", rid=rid))
     db.session.delete(rpt)
     db.session.commit()
-    flash("Lead report deleted.", "info")
+    flash("Lead candidate deleted.", "info")
     return redirect(url_for("admin.leads_list"))
 
 
@@ -2965,7 +2468,6 @@ def items_edit(iid: int):
         item.title = form.title.data
         item.link = form.link.data
         item.snippet = form.snippet.data
-        clear_public_feed_curation(item)
         db.session.commit()
         flash("Content item updated.", "success")
         return redirect(url_for("admin.items_list", source_id=item.source_id))
@@ -2985,41 +2487,13 @@ def items_delete(iid: int):
     return redirect(url_for("admin.items_list", source_id=src_id))
 
 
-def _public_feed_curation_schema_ready() -> bool:
-    try:
-        cols = {c["name"] for c in inspect(db.engine).get_columns("content_item")}
-        return "public_feed_verdict" in cols
-    except Exception:
-        return False
-
-
 @admin_bp.route("/items/public-feed-curate-status")
 @login_required
 def items_public_feed_curate_status():
-    run_id = (request.args.get("run_id") or "").strip()
-    data = snapshot_public_feed_curation(run_id)
-    if data is None:
-        return jsonify({"error": "unknown_run"}), 404
-    schema_ok = _public_feed_curation_schema_ready()
-    pending = int(count_uncurated_public_feed_candidates()) if schema_ok else None
-    return jsonify({**data, "pending_count_live": pending})
+    abort(410)
 
 
 @admin_bp.route("/items/curate-public-feed", methods=("POST",))
 @login_required
 def items_curate_public_feed():
-    if not _public_feed_curation_schema_ready():
-        flash(
-            "Database is missing public feed curation columns. From the project root run: "
-            "flask --app run:app db upgrade",
-            "error",
-        )
-        return redirect(url_for("admin.items_list"))
-    run_id, err = start_background_public_feed_curation(current_app._get_current_object())
-    if err == "busy":
-        flash("Public feed curation is already running.", "error")
-        return redirect(url_for("admin.items_list"))
-    if err == "thread_start_failed":
-        flash("Could not start the curation task. Try again or restart the server.", "error")
-        return redirect(url_for("admin.items_list"))
-    return redirect(url_for("admin.items_list", feed_curate_run=run_id))
+    abort(410)

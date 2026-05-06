@@ -69,5 +69,10 @@ def test_admin_settings_shows_flags_caps_and_recent_runs(app, client):
     assert b"Feature flags" in rv.data
     assert b"Provider status" in rv.data
     assert b"Call caps" in rv.data
+    assert b"Idea extraction from persona" not in rv.data
+    assert b"idea_extract_from_persona" not in rv.data
+    assert b"SYNAPSE_LLM_IDEA_EXTRACT_FROM_PERSONA_PROVIDER" not in rv.data
+    assert b"Public Ideas" not in rv.data
+    assert b"SYNAPSE_PUBLIC_IDEAS_ENABLED" not in rv.data
     assert b"funding_extract" in rv.data
     assert b"SYNAPSE_PUBLIC_FUNDING_ENABLED" in rv.data

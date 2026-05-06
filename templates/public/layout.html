@@ -21,8 +21,15 @@
         <a href="{{ url_for('public.index') }}" class="public-nav-link{% if nav_active == 'home' %} is-active{% endif %}">Home</a>
         <a href="{{ url_for('public.explore') }}" class="public-nav-link{% if nav_active == 'explore' %} is-active{% endif %}">Explore</a>
         <a href="{{ url_for('public.funding_list') }}" class="public-nav-link{% if nav_active == 'funding' %} is-active{% endif %}">Opportunities</a>
-        <a href="mailto:gaidica@wustl.edu" class="public-nav-link">Work with the Hub</a>
-        <a href="{{ url_for('public.search') }}" class="public-nav-link{% if nav_active == 'search' %} is-active{% endif %}">Search</a>
+        <form method="get" action="{{ url_for('public.search') }}" class="public-nav-search" data-public-nav-search>
+          <button type="button" class="public-nav-search-toggle" data-public-nav-search-toggle aria-label="Search">
+            <svg class="public-nav-search-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+          </button>
+          <input name="q" class="public-nav-search-input" data-public-nav-search-input value="{{ q|default('') }}" placeholder="Search" autocomplete="off"/>
+        </form>
       </nav>
     </div>
   </header>
@@ -32,6 +39,34 @@
   </main>
 
   <script src="{{ url_for('static', filename='admin_dt_local.js') }}"></script>
+  <script>
+(function () {
+  var root = document.querySelector("[data-public-nav-search]");
+  if (!root) return;
+  var toggle = root.querySelector("[data-public-nav-search-toggle]");
+  var input = root.querySelector("[data-public-nav-search-input]");
+  function openSearch() {
+    root.classList.add("is-open");
+    if (input) input.focus();
+  }
+  function closeSearch() {
+    if (input && input.value.trim()) return;
+    root.classList.remove("is-open");
+  }
+  if (toggle) toggle.addEventListener("click", openSearch);
+  if (input) {
+    input.addEventListener("focus", openSearch);
+    input.addEventListener("blur", function () { setTimeout(closeSearch, 120); });
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") {
+        input.value = "";
+        input.blur();
+        closeSearch();
+      }
+    });
+  }
+})();
+  </script>
   <footer class="site-foot">
     <nav class="foot-nav" aria-label="Footer">
       <a href="{{ url_for('admin.login') }}" class="foot-nav-link">Team sign-in</a>

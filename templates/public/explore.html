@@ -1,14 +1,14 @@
 {% extends "public/layout.html" %}
+{% from "public/includes/card_macros.html" import latest_cards, reveal_script %}
 {% block title %}Explore{% endblock %}
 {% block content %}
   <section class="public-page-hero">
-    <h1 class="public-page-title">Explore</h1>
-    <p class="public-page-lead">Browse public Ideas, Funding, people, and organizations in the Synapse research atlas.</p>
+    <h1 class="public-page-title">Explore public research signals.</h1>
+    <p class="public-page-lead">Start with opportunities, people, organizations, and latest public updates.</p>
   </section>
 
   {% for heading, rows, endpoint in [
-    ("Ideas", ideas, "public.idea_detail"),
-    ("Funding", fundings, "public.funding_detail"),
+    ("Opportunity Signals", fundings, "public.funding_detail"),
     ("People", people, "public.person_detail"),
     ("Organizations", organizations, "public.organization_detail")
   ] %}
@@ -17,7 +17,7 @@
     <div class="public-related-card-list">
       {% for row in rows %}
       <article class="public-related-card">
-        <p class="public-card-kicker">{{ heading[:-1] if heading.endswith("s") else heading }}</p>
+        <p class="public-card-kicker">{{ "Opportunity" if heading == "Opportunity Signals" else ("Person" if heading == "People" else "Organization") }}</p>
         <h3 class="public-card-title"><a href="{{ url_for(endpoint, slug=row.slug) }}">{{ row.title if row.title is defined else row.display_name }}</a></h3>
         {% if row.short_description is defined and row.short_description %}
         <p class="public-card-snippet">{{ row.short_description }}</p>
@@ -33,4 +33,25 @@
     </div>
   </section>
   {% endfor %}
+
+  {% if public_tags %}
+  <section class="public-section">
+    <h2 class="public-section-title">Research methods and tags</h2>
+    <div class="public-chip-row">
+      {% for tag in public_tags %}
+      <a class="public-chip" href="{{ url_for('public.search', q=tag) }}">{{ tag }}</a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="public-section">
+    <h2 class="public-section-title">The Latest</h2>
+    {% if latest_groups %}
+      {{ latest_cards(latest_groups) }}
+    {% else %}
+      <p class="public-empty">No latest public signals yet.</p>
+    {% endif %}
+  </section>
+  {{ reveal_script() }}
 {% endblock %}

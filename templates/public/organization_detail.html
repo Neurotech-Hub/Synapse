@@ -13,7 +13,7 @@
         {% if persona.research_focus %}
           <p class="public-focus">{{ (persona.research_focus or [])[:6] | join(' · ') }}{% if (persona.research_focus or [])|length > 6 %} · …{% endif %}</p>
         {% endif %}
-        <p class="public-persona-disclaimer">Hub-generated snapshot — not a claim of fact.</p>
+        <p class="public-persona-disclaimer">Generated snapshot — not a claim of fact.</p>
       {% endif %}
     </header>
 
@@ -33,6 +33,21 @@
     {% endif %}
 
     <main class="public-entity-main">
+      {% if related_funding %}
+      <section class="public-section">
+        <h2 class="public-section-title">Related opportunities</h2>
+        <div class="public-related-card-list">
+          {% for funding in related_funding %}
+          <article class="public-related-card">
+            <p class="public-card-kicker">Opportunity · Effort: {{ (funding.effort_index or "unknown")|title }}</p>
+            <h3 class="public-card-title"><a href="{{ url_for('public.funding_detail', slug=funding.slug) }}">{{ funding.title }}</a></h3>
+            <p class="public-card-snippet">{{ funding.summary_public or funding.eligibility_summary or "Review the official source before decisions." }}</p>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
       <section class="public-latest-section" aria-labelledby="latest-heading">
         <div class="public-latest-head">
           <h2 id="latest-heading" class="public-section-title public-section-title--home">Latest for {{ organization.display_name }}</h2>

@@ -25,54 +25,6 @@ PROMPT_SCHEMAS: dict[str, dict[str, Any]] = {
         "scores": ("confidence",),
         "list_fields": ("best_for", "tags", "warnings"),
     },
-    "idea_extract_from_persona": {
-        "required": COMMON_REQUIRED + ("candidate_ideas",),
-        "scores": ("confidence",),
-        "list_fields": ("candidate_ideas", "missing_information", "warnings"),
-    },
-    "idea_extract_from_content_item": {
-        "required": COMMON_REQUIRED + ("candidate_ideas",),
-        "scores": ("confidence",),
-        "list_fields": ("candidate_ideas", "missing_information", "warnings"),
-    },
-    "idea_synthesize_page": {
-        "required": COMMON_REQUIRED + ("headline", "short_summary", "why_it_matters"),
-        "scores": ("confidence",),
-        "list_fields": ("common_methods", "related_capabilities", "what_the_hub_can_help_with", "public_caveats", "warnings"),
-    },
-    "match_funding_to_entity": {
-        "required": COMMON_REQUIRED + ("match_score", "rationale", "recommended_next_step"),
-        "enums": {"recommended_next_step": {"ignore", "watch", "review", "strong_review"}},
-        "scores": ("confidence", "match_score", "topic_fit", "method_fit", "eligibility_fit", "hub_capability_fit", "funding_amount_fit", "deadline_urgency", "effort_reasonableness", "evidence_strength"),
-        "list_fields": ("supporting_points", "concerns", "missing_information", "warnings"),
-    },
-    "match_entity_to_idea": {
-        "required": COMMON_REQUIRED + ("match_score", "relationship_type", "rationale"),
-        "enums": {"relationship_type": {"direct", "adjacent", "weak", "unknown"}},
-        "scores": ("confidence", "match_score", "topic_fit", "method_fit", "evidence_strength"),
-        "list_fields": ("supporting_points", "warnings"),
-    },
-    "match_hub_to_target": {
-        "required": COMMON_REQUIRED + ("hub_fit_score", "rationale"),
-        "scores": ("confidence", "hub_fit_score", "capability_fit", "technical_need_fit", "strategic_fit", "relationship_path_score"),
-        "list_fields": ("likely_hub_services", "possible_pilot_shapes", "concerns", "warnings"),
-    },
-    "collaboration_hypothesis": {
-        "required": COMMON_REQUIRED + ("title", "hypothesis_summary", "recommended_action", "status_recommendation"),
-        "enums": {"status_recommendation": {"watch", "review", "active", "dismiss"}},
-        "scores": ("confidence", "score_fit", "score_timing", "score_funding", "score_effort_feasibility", "score_relationship_path", "score_total"),
-        "list_fields": ("supporting_evidence", "risks", "warnings"),
-    },
-    "outreach_angle": {
-        "required": COMMON_REQUIRED + ("angle", "conversation_starter"),
-        "scores": ("confidence",),
-        "list_fields": ("avoid_saying", "warnings"),
-    },
-    "lead_score_explain": {
-        "required": COMMON_REQUIRED + ("summary",),
-        "scores": ("confidence",),
-        "list_fields": ("drivers", "concerns", "warnings"),
-    },
     "public_entity_summary": {
         "required": COMMON_REQUIRED + ("display_summary",),
         "scores": ("confidence",),
@@ -82,11 +34,6 @@ PROMPT_SCHEMAS: dict[str, dict[str, Any]] = {
         "required": COMMON_REQUIRED + ("display_summary",),
         "scores": ("confidence",),
         "list_fields": ("research_themes", "organizations", "public_caveats", "warnings"),
-    },
-    "public_research_atlas_blurb": {
-        "required": COMMON_REQUIRED + ("headline", "blurb"),
-        "scores": ("confidence",),
-        "list_fields": ("featured_links", "warnings"),
     },
 }
 

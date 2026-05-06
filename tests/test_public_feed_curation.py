@@ -231,34 +231,28 @@ def test_run_public_feed_curation_batch_mocked_llm(app):
         assert rb.public_feed_display_title is None
 
 
-def test_items_public_feed_curate_status_unknown(client):
+def test_items_public_feed_curate_status_is_retired(client):
     client.post(
         "/admin/login",
         data={"password": "test-pass", "submit": "Sign in"},
         follow_redirects=True,
     )
     r = client.get("/admin/items/public-feed-curate-status?run_id=nope")
-    assert r.status_code == 404
+    assert r.status_code == 410
 
 
-def test_items_curate_post_redirects_with_run_id(client):
+def test_items_curate_post_is_retired(client):
     client.post(
         "/admin/login",
         data={"password": "test-pass", "submit": "Sign in"},
         follow_redirects=True,
     )
-    with patch(
-        "app.web.admin.routes.start_background_public_feed_curation",
-        return_value=("run-xyz-1", ""),
-    ):
-        r = client.post(
-            "/admin/items/curate-public-feed",
-            data={},
-            follow_redirects=False,
-        )
-    assert r.status_code == 302
-    loc = r.headers.get("Location") or ""
-    assert "feed_curate_run=run-xyz-1" in loc
+    r = client.post(
+        "/admin/items/curate-public-feed",
+        data={},
+        follow_redirects=False,
+    )
+    assert r.status_code == 410
 
 
 class _ImmediateThread:

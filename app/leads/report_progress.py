@@ -88,7 +88,7 @@ def start_background_lead_report(app: Flask, report_id: int) -> tuple[bool, str]
                     },
                     default=str,
                 )
-                slog = PollLog(ok=ok, detail=f"[lead-report] {detail_txt}")
+                slog = PollLog(ok=ok, detail=f"[lead-candidate] {detail_txt}")
                 db.session.add(slog)
                 db.session.commit()
                 _LAST_DETAIL = {"ok": ok, "report_id": rid, "status": status_after}
@@ -100,7 +100,7 @@ def start_background_lead_report(app: Flask, report_id: int) -> tuple[bool, str]
             try:
                 with app_ref.app_context():
                     db.session.rollback()
-                    slog = PollLog(ok=False, detail=f"[lead-report] {detail_txt}")
+                    slog = PollLog(ok=False, detail=f"[lead-candidate] {detail_txt}")
                     db.session.add(slog)
                     db.session.commit()
             except Exception:  # noqa: BLE001

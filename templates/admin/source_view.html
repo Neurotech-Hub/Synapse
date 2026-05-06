@@ -85,7 +85,7 @@
 {% include "admin/includes/source_fields.html" %}
     <div class="field-group">
       <span class="field-label field-label-block">Source owner (XOR)</span>
-      <p class="muted contextual-note">Exactly one of <strong>person</strong> or <strong>organization</strong>. This drives persona evidence for lead reports and Hub corpus membership (via the Hub corpus organization and its people).</p>
+      <p class="muted contextual-note">Exactly one of <strong>person</strong> or <strong>organization</strong>. This drives persona evidence for lead candidates and Hub corpus membership (via the Hub corpus organization and its people).</p>
       <select name="owner_kind" id="source-owner-kind" class="field-input">
         <option value="none" {% if owner_kind == 'none' %}selected{% endif %}>Unassigned</option>
         <option value="person" {% if owner_kind == 'person' %}selected{% endif %}>Person</option>

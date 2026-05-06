@@ -4,7 +4,7 @@
 {% block content %}
   <article class="public-entity-page">
     <header class="public-entity-header">
-      <p class="public-card-kicker">Funding · Effort: {{ (funding.effort_index or "unknown")|title }}</p>
+      <p class="public-card-kicker">Opportunity · Effort: {{ (funding.effort_index or "unknown")|title }}</p>
       <h1 class="public-page-title">{{ funding.title }}</h1>
       {% if funding.summary_public %}
       <p class="public-persona-lead">{{ funding.summary_public }}</p>
@@ -33,7 +33,7 @@
 
       {% if funding.eligibility_summary %}
       <section class="public-section">
-        <h2 class="public-section-title">Who should care</h2>
+        <h2 class="public-section-title">Eligibility notes</h2>
         <p>{{ funding.eligibility_summary }}</p>
       </section>
       {% endif %}
@@ -46,16 +46,15 @@
       </section>
       {% endif %}
 
-      {% if related_ideas %}
+      {% if related_people or related_organizations %}
       <section class="public-section">
-        <h2 class="public-section-title">Relevant ideas</h2>
-        <div class="public-related-card-list">
-          {% for idea in related_ideas %}
-          <article class="public-related-card">
-            <p class="public-card-kicker">{{ idea.idea_type.replace("_", " ") }}</p>
-            <h3 class="public-card-title"><a href="{{ url_for('public.idea_detail', slug=idea.slug) }}">{{ idea.title }}</a></h3>
-            <p class="public-card-snippet">{{ idea.short_description or idea.public_summary or "A related public idea." }}</p>
-          </article>
+        <h2 class="public-section-title">Connected people and organizations</h2>
+        <div class="public-chip-row">
+          {% for person in related_people %}
+          <a class="public-chip" href="{{ url_for('public.person_detail', slug=person.slug) }}">{{ person.display_name }}</a>
+          {% endfor %}
+          {% for org in related_organizations %}
+          <a class="public-chip" href="{{ url_for('public.organization_detail', slug=org.slug) }}">{{ org.display_name }}</a>
           {% endfor %}
         </div>
       </section>
@@ -64,7 +63,7 @@
 
     <aside class="public-entity-sidebar">
       <section class="public-section">
-        <h2 class="public-section-title">Funding Radar</h2>
+        <h2 class="public-section-title">Opportunity details</h2>
         <ul class="public-latest-list" role="list">
           <li class="public-latest-item">Effort: {{ (funding.effort_index or "unknown")|title }}</li>
           {% if funding.mechanism %}<li class="public-latest-item">Mechanism: {{ funding.mechanism }}</li>{% endif %}

@@ -6,7 +6,7 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import FundingOpportunity, Idea, MatchEdge
+from app.models import FundingOpportunity
 
 pytestmark = pytest.mark.usefixtures("_admin_env")
 
@@ -129,86 +129,5 @@ def test_public_funding_can_be_disabled(tmp_path):
     assert client.get("/funding/").status_code == 404
 
 
-def test_public_idea_and_funding_show_public_safe_related_edges(app, client):
-    with app.app_context():
-        funding = FundingOpportunity(
-            slug="related_funding",
-            title="Related Funding",
-            status="active",
-            is_public=True,
-            is_reviewed=True,
-            effort_index="mild",
-            summary_public="A public funding card.",
-        )
-        private_funding = FundingOpportunity(
-            slug="private_related_funding",
-            title="Private Related Funding",
-            status="active",
-            is_public=True,
-            is_reviewed=True,
-            summary_private="Should not appear.",
-        )
-        idea = Idea(
-            slug="related_idea",
-            title="Related Idea",
-            status="public",
-            is_public=True,
-            is_reviewed=True,
-            short_description="A public idea.",
-        )
-        private_idea = Idea(
-            slug="private_idea",
-            title="Private Idea",
-            status="public",
-            is_public=False,
-            is_reviewed=True,
-        )
-        db.session.add_all([funding, private_funding, idea, private_idea])
-        db.session.flush()
-        db.session.add_all(
-            [
-                MatchEdge(
-                    source_type="funding",
-                    source_id=funding.id,
-                    target_type="idea",
-                    target_id=idea.id,
-                    match_type="funding_to_idea",
-                    status="accepted",
-                    visibility="public_safe",
-                    score_total=0.8,
-                    private_rationale="Private rationale must not appear.",
-                ),
-                MatchEdge(
-                    source_type="funding",
-                    source_id=private_funding.id,
-                    target_type="idea",
-                    target_id=idea.id,
-                    match_type="funding_to_idea",
-                    status="accepted",
-                    visibility="private",
-                    score_total=0.9,
-                ),
-                MatchEdge(
-                    source_type="funding",
-                    source_id=funding.id,
-                    target_type="idea",
-                    target_id=private_idea.id,
-                    match_type="funding_to_idea",
-                    status="accepted",
-                    visibility="public_safe",
-                    score_total=0.9,
-                ),
-            ]
-        )
-        db.session.commit()
-
-    idea_detail = client.get("/ideas/related_idea")
-    assert idea_detail.status_code == 200
-    assert b"Related Funding" in idea_detail.data
-    assert b"Private Related Funding" not in idea_detail.data
-    assert b"Private rationale" not in idea_detail.data
-
-    funding_detail = client.get("/funding/related_funding")
-    assert funding_detail.status_code == 200
-    assert b"Related Idea" in funding_detail.data
-    assert b"Private Idea" not in funding_detail.data
+def test_public_ideas_route_is_removed(client):
+    assert client.get("/ideas/").status_code == 404

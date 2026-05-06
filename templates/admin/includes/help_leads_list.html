@@ -1,12 +1,12 @@
 <section class="admin-tip-sec">
-  <h3 class="admin-tip-h">Lead reports</h3>
-  <p class="admin-tip-p">Click <strong>New Report</strong> for a modal to queue synthesis for one person, organization, or place. You stay on this page — status updates while the job runs; <code>[lead-report]</code> lines appear in the log below when complete. Hub defaults live under the cog.</p>
+  <h3 class="admin-tip-h">Lead candidates</h3>
+  <p class="admin-tip-p">Click <strong>New candidate</strong> to queue AI synthesis for one person, organization, or place. The job favors recent ingested content tied to that subject, then writes a concise Hub-facing candidate for review.</p>
 </section>
 <section class="admin-tip-sec">
   <h3 class="admin-tip-h">Hub settings</h3>
-  <p class="admin-tip-p">Choose the <strong>Hub corpus organization</strong> whose ingests supply Hub excerpts for every lead report you queue from this page.</p>
+  <p class="admin-tip-p">Choose the <strong>Hub corpus organization</strong> whose context informs every candidate you queue from this page.</p>
 </section>
 <section class="admin-tip-sec">
   <h3 class="admin-tip-h">Tuning</h3>
-  <p class="admin-tip-p">Prompts live under <code>prompts/lead_report_*.txt</code>. Caps use <code>app/leads/lead_report_budgets.py</code> and optional <code>SYNAPSE_LEAD_REPORT_*</code> environment variables.</p>
+  <p class="admin-tip-p">Caps live in <code>app/leads/lead_report_budgets.py</code> and optional <code>SYNAPSE_LEAD_REPORT_*</code> environment variables until the storage cleanup migration renames the internals.</p>
 </section>

@@ -1,6 +1,6 @@
 # Synapse
 
-**Synapse** is a Flask application for **research-intelligence style ingestion and curation**: it polls **RSS feeds** and **HTML pages**, stores normalized **content items**, builds **structured personas** (people, organizations, places) from that evidence using **LLMs**, powers an optional **Hub-centric lead reporting** pipeline, and exposes a **public website** for discovery plus a **password-protected admin** workspace for operators.
+**Synapse** is a Flask application for **research-intelligence style ingestion and curation**: it polls **RSS feeds** and **HTML pages**, stores normalized **content items**, builds **structured personas** (people, organizations, places) from that evidence using **LLMs**, powers recent-content-biased **Hub lead candidates**, and exposes a **public website** for discovery plus a **password-protected admin** workspace for operators.
 
 It was built in the context of **Neurotech Hub** workflows but the architecture is domain-agnostic: prompts and entity models can evolve toward other verticals.
 
@@ -15,11 +15,11 @@ It was built in the context of **Neurotech Hub** workflows but the architecture 
 | **Admin curation** | Operators approve sources, attach them to **people** or **organizations**, edit items, and run **public Latest** curation (LLM-assisted verdicts on what to show). |
 | **Personas** | For each person, organization, or building/place, Synapse maintains a **`PersonaSnapshot`**: JSON-aligned fields (focus, methods, keywords, projects, notes, etc.) produced from owned-source evidence. Rebuilds can be **full**, **incremental**, or **light**, with character budgets and tail summarization to stay within model context. |
 | **Rollups** | Organization and **building/place** personas can synthesize member personas plus source excerpts. A designated **Hub** organization can load persona text from a bundled JSON file instead of the LLM. |
-| **Lead reports** | **Leads** ties a **Hub corpus** config and prompts to multi-step **`LeadReport`** jobs that consolidate Hub and target evidence (optional long-running background thread). |
+| **Lead candidates** | **Leads** ties a **Hub corpus** config and prompts to recent-content-biased candidate jobs that consolidate Hub and target evidence (optional long-running background thread). |
 | **Geography** | **Regions** (polygons) and **buildings** link to organizations for map-oriented UX where implemented. |
 | **MCP** | Optional **stdio MCP server** exposes read-only tools over the same DB-backed retrieval layer (`docs/mcp.md`), including optional **OpenAI ChatGPT-style** `search` / `fetch` shapes when enabled. |
 
-**LLM usage at a glance:** **Personas** default to **OpenAI** when `OPENAI_API_KEY` is set; **HTML page title/snippet enrichment**, **lead reports**, and **public feed curation** default to **Ollama** unless you override provider env vars (see [LLM configuration](#llm-configuration-and-context-overflow-flow)). Install the **`openai`** package in the **same Python environment** as the Flask app (`python -m pip install openai`).
+**LLM usage at a glance:** **Personas** default to **OpenAI** when `OPENAI_API_KEY` is set; **HTML page title/snippet enrichment** and **lead candidates** default to **Ollama** unless you override provider env vars (see [LLM configuration](#llm-configuration-and-context-overflow-flow)). Install the **`openai`** package in the **same Python environment** as the Flask app (`python -m pip install openai`).
 
 ---
 
@@ -28,7 +28,7 @@ It was built in the context of **Neurotech Hub** workflows but the architecture 
 | Surface | Path | Role |
 |---------|------|------|
 | **Public** | `/` | Landing, URL submit (canonicalized URLs, duplicate handling, rate limits), listings and detail pages for people/organizations and **Latest** content cards. |
-| **Admin** | `/admin/` | Dashboard (**Poll now**, poll logs, persona health hints), CRUD for **people**, **organizations**, **buildings**, **regions**, **sources**, **content items**, **snapshots**; **Leads** (Hub settings, lead reports); identity refresh actions. |
+| **Admin** | `/admin/` | Dashboard (**Poll now**, poll logs, persona health hints), CRUD for **people**, **organizations**, **buildings**, **regions**, **sources**, **content items**, **snapshots**; **Leads** (Hub settings, lead candidates); identity refresh actions. |
 
 Authentication: **`ADMIN_PASSWORD`** or **`ADMIN_PASSWORD_HASH`**. On **debug** + loopback, login may be bypassed for local dev—see [Configuration](#configuration).
 
@@ -52,8 +52,8 @@ Authentication: **`ADMIN_PASSWORD`** or **`ADMIN_PASSWORD_HASH`**. On **debug** 
 |------|----------|
 | [`app/identity/`](app/identity/) | Persona build/rollup, evidence packing, staleness, rebuild modes |
 | [`app/ingest/`](app/ingest/) | Poll pipeline, RSS/HTML helpers, `llm_client`, Ollama/OpenAI backends |
-| [`app/leads/`](app/leads/) | Lead report pipeline, Hub corpus helpers, progress |
-| [`app/public_feed/`](app/public_feed/) | Public Latest curation batches |
+| [`app/leads/`](app/leads/) | Lead candidate pipeline, Hub corpus helpers, progress |
+| [`app/public_feed/`](app/public_feed/) | Compatibility helpers for public Latest display |
 | [`app/web/`](app/web/) | [`public_routes.py`](app/web/public_routes.py), [`admin/routes.py`](app/web/admin/routes.py) |
 | [`app/mcp/`](app/mcp/) | Optional MCP stdio server |
 | [`prompts/`](prompts/) | Externalized LLM templates |
@@ -100,13 +100,13 @@ SYNAPSE_PORT=5002 flask --app wsgi run --debug --host 127.0.0.1 --port 5002
 | Public | [http://127.0.0.1:5002/](http://127.0.0.1:5002/) |
 | Admin | [http://127.0.0.1:5002/admin/](http://127.0.0.1:5002/admin/) |
 
-The **Hub corpus organization** is chosen under **Leads → Hub settings**. Per-source **Neurotech Hub** tagging and owners drive which ingests feed Hub lead reports. Evidence caps and LLM routing are documented in [LLM configuration](#llm-configuration-and-context-overflow-flow).
+The **Hub corpus organization** is chosen under **Leads → Hub settings**. Per-source **Neurotech Hub** tagging and owners drive which ingests feed Hub lead candidates. Evidence caps and LLM routing are documented in [LLM configuration](#llm-configuration-and-context-overflow-flow).
 
 ---
 
 ## LLM configuration and context overflow flow
 
-Synapse routes model calls through [`app/ingest/llm_client.py`](app/ingest/llm_client.py): **personas** default to **OpenAI** when `OPENAI_API_KEY` is set, and **HTML page summarization** defaults to **Ollama**. **Lead reports** and **public Latest curation** default to Ollama unless you point them at OpenAI.
+Synapse routes model calls through [`app/ingest/llm_client.py`](app/ingest/llm_client.py): **personas** default to **OpenAI** when `OPENAI_API_KEY` is set, and **HTML page summarization** defaults to **Ollama**. **Lead candidates** default to Ollama unless you point them at OpenAI.
 
 ### End-to-end flow (persona / identity)
 
@@ -148,8 +148,7 @@ flowchart TD
 | Task | Default | Override | On primary failure |
 |------|---------|----------|---------------------|
 | Persona (person / org / building) | OpenAI if `OPENAI_API_KEY` else Ollama | `SYNAPSE_LLM_IDENTITY_PROVIDER=openai\|ollama` | `SYNAPSE_LLM_IDENTITY_FALLBACK_OLLAMA` (default on) → Ollama |
-| Hub lead reports | Ollama | `SYNAPSE_LLM_LEAD_PROVIDER` | `SYNAPSE_LLM_LEAD_FALLBACK_OLLAMA` (default on) |
-| Public feed curation | Ollama | `SYNAPSE_LLM_PUBLIC_FEED_PROVIDER` | `SYNAPSE_LLM_PUBLIC_FEED_FALLBACK_OLLAMA` (default on) |
+| Hub lead candidates | Ollama | `SYNAPSE_LLM_LEAD_PROVIDER` | `SYNAPSE_LLM_LEAD_FALLBACK_OLLAMA` (default on) |
 
 ### OpenAI (API key required for these paths)
 
@@ -160,10 +159,8 @@ flowchart TD
 | `SYNAPSE_OPENAI_IDENTITY_TIMEOUT_SEC` | Identity call timeout. |
 | `SYNAPSE_OPENAI_IDENTITY_MAX_COMPLETION_TOKENS` | Cap on completion length for JSON persona output. |
 | `SYNAPSE_OPENAI_IDENTITY_SYSTEM` | Optional system prompt for identity calls. |
-| `SYNAPSE_OPENAI_LEAD_MODEL` | Lead reports when `SYNAPSE_LLM_LEAD_PROVIDER=openai`. |
-| `SYNAPSE_OPENAI_LEAD_TIMEOUT_SEC` | Lead report timeout. |
-| `SYNAPSE_OPENAI_PUBLIC_FEED_MODEL` | Public feed curation when provider is OpenAI. |
-| `SYNAPSE_OPENAI_PUBLIC_FEED_TIMEOUT_SEC` | Curation timeout. |
+| `SYNAPSE_OPENAI_LEAD_MODEL` | Lead candidates when `SYNAPSE_LLM_LEAD_PROVIDER=openai`. |
+| `SYNAPSE_OPENAI_LEAD_TIMEOUT_SEC` | Lead candidate timeout. |
 
 Listed in [`requirements.txt`](requirements.txt). Use **`python -m pip install openai`** with the **same interpreter** as `python run.py`.
 
@@ -176,8 +173,7 @@ Listed in [`requirements.txt`](requirements.txt). Use **`python -m pip install o
 | `SYNAPSE_HTML_PAGE_LLM` | `0` / false disables LLM title/snippet for `html_page` ingest (heuristics only). |
 | `SYNAPSE_HTML_PAGE_LLM_PROMPT_CHARS` / `SYNAPSE_HTML_PAGE_LLM_SNIPPET_TARGET_CHARS` | Page text budget and target snippet size for summarize. |
 | `SYNAPSE_OLLAMA_IDENTITY_NUM_CTX` / `SYNAPSE_OLLAMA_IDENTITY_OPTIONS` / `SYNAPSE_OLLAMA_IDENTITY_JSON_FORMAT` | Identity-only Ollama options (large `num_ctx` for long prompts). |
-| `SYNAPSE_LEAD_REPORT_NUM_CTX` / `SYNAPSE_LEAD_REPORT_OLLAMA_TIMEOUT` | Lead report context and timeout. |
-| `SYNAPSE_PUBLIC_FEED_CURATE_NUM_CTX` / `SYNAPSE_PUBLIC_FEED_CURATE_OLLAMA_TIMEOUT` | Public Latest curation. |
+| `SYNAPSE_LEAD_REPORT_NUM_CTX` / `SYNAPSE_LEAD_REPORT_OLLAMA_TIMEOUT` | Lead candidate context and timeout. |
 
 Full Ollama runbook: [docs/ollama.md](docs/ollama.md).
 
@@ -192,9 +188,9 @@ Full Ollama runbook: [docs/ollama.md](docs/ollama.md).
 | `SYNAPSE_IDENTITY_FULL_TEXT_ITEMS` | `14` | How many leading items get the larger excerpt budget before truncation tightens. |
 | `SYNAPSE_IDENTITY_FULL_BATCH_THRESHOLD` | `30` | Above this count, tail items are **summarized** via a separate small LLM call. |
 
-### Lead report evidence budgets (Hub pipeline)
+### Lead candidate evidence budgets (Hub pipeline)
 
-These cap what goes into **lead report** prompts (see [`app/leads/lead_report_budgets.py`](app/leads/lead_report_budgets.py)); provider choice is still `SYNAPSE_LLM_LEAD_PROVIDER`.
+These cap what goes into **lead candidate** prompts (see [`app/leads/lead_report_budgets.py`](app/leads/lead_report_budgets.py)); provider choice is still `SYNAPSE_LLM_LEAD_PROVIDER`.
 
 | Variable | Role |
 |----------|------|
@@ -255,7 +251,7 @@ After install, confirm `ollama` is on your PATH (e.g. `/opt/homebrew/bin/ollama`
 
 Provider choice, HTML-page LLM toggle, `num_ctx`, timeouts, identity overflow budgets, and lead **evidence caps** are centralized in [LLM configuration](#llm-configuration-and-context-overflow-flow).
 
-**Workflow:** **Poll now** (Dashboard) ingests feeds into content items → configure **Hub corpus organization** and tagging under **Sources** / **Leads** → queue **Hub lead reports** from **Leads**. Report jobs log as **`[lead-report]`** on the Leads page; the Dashboard hides `[lead-report]` and `[lead-qual]` lines from the main poll log strip.
+**Workflow:** **Poll now** (Dashboard) ingests feeds into content items → configure **Hub corpus organization** and tagging under **Sources** / **Leads** → queue **Hub lead candidates** from **Leads**. Candidate jobs log as **`[lead-candidate]`** on the Leads page; the Dashboard hides `[lead-candidate]`, legacy `[lead-report]`, and `[lead-qual]` lines from the main poll log strip.
 
 HTML pages still get **ContentItem** rows on each new SHA-256 snapshot; when **`SYNAPSE_HTML_PAGE_LLM`** is enabled, the local model shapes `title`/`snippet` (see LLM section).
 

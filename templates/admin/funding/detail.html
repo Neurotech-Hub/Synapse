@@ -17,7 +17,7 @@
   {% if funding.synthesis_status in ("needs_review", "failed") %}<span class="badge badge-muted">LLM generated</span>{% endif %}
 </p>
 
-{% set funding_stage = "Published" if funding.is_public and funding.is_reviewed and funding.status == "active" else ("Archived" if funding.status == "archived" else ("Needs source" if not funding.raw_text else ("Needs review" if funding.synthesized_json else ("Ready to publish" if funding.is_reviewed and not funding.is_public else "Needs draft")))) %}
+{% set funding_stage = "Published" if funding.is_public and funding.is_reviewed and funding.status == "active" else ("Archived" if funding.status == "archived" else ("Needs source" if not funding.raw_text else ("Ready to publish" if funding.is_reviewed and not funding.is_public else ("Needs review" if funding.synthesized_json else "Needs draft")))) %}
 <section class="source-view-section admin-status-card">
   <div>
     <p class="admin-preview-card-kicker">Funding workflow</p>
@@ -44,14 +44,13 @@
       <button type="submit" class="secondary-btn-inline">Discard draft</button>
     </form>
     {% elif funding.is_reviewed and not funding.is_public %}
-    <form method="post" action="{{ url_for('admin.funding_review', funding_id=funding.id) }}" class="inline-form">
+    <form method="post" action="{{ url_for('admin.funding_publish', funding_id=funding.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="primary-btn">Mark ready</button>
+      <button type="submit" class="primary-btn">Publish card</button>
     </form>
     <a href="{{ url_for('public.funding_detail', slug=funding.slug) }}" target="_blank" rel="noopener" class="primary-btn-inline">Preview public card</a>
     {% else %}
     <a href="{{ url_for('public.funding_detail', slug=funding.slug) }}" target="_blank" rel="noopener" class="primary-btn">Preview public page</a>
-    <a href="{{ url_for('admin.matching_dashboard') }}" class="primary-btn-inline">Review relationships</a>
     {% endif %}
   </div>
 </section>
@@ -156,11 +155,13 @@
 <details class="source-view-section">
   <summary>Advanced Tools</summary>
   <div class="form-submit-row">
+    {% if not funding.is_reviewed %}
     <form method="post" action="{{ url_for('admin.funding_review', funding_id=funding.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <input type="hidden" name="next" value="{{ request.path }}"/>
       <button type="submit" class="primary-btn-inline">Mark reviewed</button>
     </form>
+    {% endif %}
     <form method="post" action="{{ url_for('admin.funding_effort_rebuild', funding_id=funding.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <input type="hidden" name="next" value="{{ request.path }}"/>
@@ -179,10 +180,10 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <button type="submit" class="primary-btn-inline">Rewrite public summary</button>
     </form>
-    <form method="post" action="{{ url_for('admin.matching_generate_funding', funding_id=funding.id) }}" class="inline-form">
+    <form method="post" action="{{ url_for('admin.funding_publish', funding_id=funding.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <input type="hidden" name="next" value="{{ request.path }}"/>
-      <button type="submit" class="primary-btn-inline">Find related Ideas and people</button>
+      <button type="submit" class="primary-btn-inline">Publish card</button>
     </form>
     <form method="post" action="{{ url_for('admin.funding_archive', funding_id=funding.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>

@@ -137,9 +137,74 @@
 <p class="muted contextual-note">No URLs from the public submission form are waiting for approval.</p>
 {% endif %}
 
-{% set heading_h2 = "Recent poll logs" %}
-{% set log_empty_message = "No polls yet." %}
-{% include "admin/includes/poll_logs_list.html" %}
+<h2 class="dashboard-section-h2">Funding needing attention</h2>
+{% if funding_needs_review %}
+<table class="tbl tbl-compact">
+  <thead><tr><th>Title</th><th>Status</th><th>Reason</th><th class="tbl-actions-col"></th></tr></thead>
+  <tbody>
+  {% for funding in funding_needs_review %}
+    <tr>
+      <td>{{ funding.title }}</td>
+      <td>{{ funding.status }}</td>
+      <td>{% if not funding.is_reviewed %}needs review{% elif funding.fetch_error %}fetch failed{% else %}{{ funding.synthesis_status }}{% endif %}</td>
+      <td class="tbl-actions"><a href="{{ url_for('admin.funding_detail', funding_id=funding.id) }}">Open</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted contextual-note">No funding review items.</p>
+{% endif %}
+
+<h2 class="dashboard-section-h2">Lead candidates</h2>
+{% if lead_candidates %}
+<table class="tbl tbl-compact">
+  <thead><tr><th>ID</th><th>Subject</th><th>Status</th><th class="tbl-actions-col"></th></tr></thead>
+  <tbody>
+  {% for candidate in lead_candidates %}
+    <tr>
+      <td>#{{ candidate.id }}</td>
+      <td>
+        {% if candidate.target_person %}Person · {{ candidate.target_person.display_name }}
+        {% elif candidate.target_organization %}Organization · {{ candidate.target_organization.display_name }}
+        {% elif candidate.target_building %}Place · {{ candidate.target_building.place_name or candidate.target_building.display_name }}
+        {% elif candidate.target_region %}Region · {{ candidate.target_region.region_name }}
+        {% else %}—{% endif %}
+      </td>
+      <td>{{ candidate.status }}</td>
+      <td class="tbl-actions"><a href="{{ url_for('admin.lead_reports_view', rid=candidate.id) }}">Open</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted contextual-note">No lead candidates waiting for review.</p>
+{% endif %}
+
+<h2 class="dashboard-section-h2">LLM failures</h2>
+{% if llm_failures %}
+<table class="tbl tbl-compact">
+  <thead><tr><th>Prompt</th><th>Status</th><th>Problem</th><th>Created</th></tr></thead>
+  <tbody>
+  {% for run in llm_failures %}
+    <tr>
+      <td>{{ run.prompt_name }}</td>
+      <td>{{ run.status }}</td>
+      <td>{{ run.error_message or (run.validation_errors_json | join("; ")) }}</td>
+      <td>{{ run.created_at|local_dt("datetime") }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted contextual-note">No failed prompt runs.</p>
+{% endif %}
+
+<details class="source-view-section dashboard-log-details">
+  <summary class="dashboard-section-h2 dashboard-section-h2--logs">Recent poll logs</summary>
+  {% set log_empty_message = "No polls yet." %}
+  {% include "admin/includes/poll_logs_list.html" %}
+</details>
 
 <script>
 (function () {

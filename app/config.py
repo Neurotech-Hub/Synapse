@@ -49,10 +49,6 @@ class BaseConfig:
     #: Unset defaults to enabled; set SYNAPSE_HTML_PAGE_LLM=0 to use extraction-only heuristics.
     _html_llm_raw = os.environ.get("SYNAPSE_HTML_PAGE_LLM", "1").strip().lower()
     SYNAPSE_HTML_PAGE_LLM = _html_llm_raw not in ("0", "false", "no", "off")
-    _ideas_enabled_raw = os.environ.get("SYNAPSE_IDEAS_ENABLED", "1").strip().lower()
-    SYNAPSE_IDEAS_ENABLED = _ideas_enabled_raw not in ("0", "false", "no", "off")
-    _public_ideas_enabled_raw = os.environ.get("SYNAPSE_PUBLIC_IDEAS_ENABLED", _ideas_enabled_raw or "1").strip().lower()
-    SYNAPSE_PUBLIC_IDEAS_ENABLED = _public_ideas_enabled_raw not in ("0", "false", "no", "off")
     _public_funding_enabled_raw = os.environ.get("SYNAPSE_PUBLIC_FUNDING_ENABLED", "1").strip().lower()
     SYNAPSE_PUBLIC_FUNDING_ENABLED = _public_funding_enabled_raw not in ("0", "false", "no", "off")
     _matching_enabled_raw = os.environ.get("SYNAPSE_MATCHING_ENABLED", "1").strip().lower()

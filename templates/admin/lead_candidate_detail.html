@@ -1,11 +1,11 @@
 {% extends "admin/base.html" %}
-{% block title %}Lead report #{{ report.id }}{% endblock %}
+{% block title %}Lead candidate #{{ report.id }}{% endblock %}
 {% block body %}
 <header class="page-head page-head--compact">
-  <h1>Lead report #{{ report.id }}</h1>
+  <h1>Lead candidate #{{ report.id }}</h1>
 </header>
 
-<section class="lead-report-meta-card" aria-label="Report details">
+<section class="lead-report-meta-card" aria-label="Candidate details">
   <dl class="lead-report-meta-dl">
     <div class="lead-report-meta-item">
       <dt>Subject</dt>
@@ -27,7 +27,7 @@
     {% endif %}
     <div class="lead-report-meta-item">
       <dt>Hub corpus</dt>
-      <dd>{% if report.hub_organization %}<a href="{{ url_for('admin.organizations_edit', oid=report.hub_organization.id) }}">{{ report.hub_organization.display_name }}</a>{% elif report.status in ('queued', 'running') %}<span class="muted">Recorded when this run starts (from Hub settings)</span>{% else %}<span class="muted">—</span>{% endif %}</dd>
+      <dd>{% if report.hub_organization %}<a href="{{ url_for('admin.organizations_edit', oid=report.hub_organization.id) }}">{{ report.hub_organization.display_name }}</a>{% elif report.status in ('queued', 'running') %}<span class="muted">Recorded when this run starts</span>{% else %}<span class="muted">—</span>{% endif %}</dd>
     </div>
   </dl>
 </section>
@@ -39,26 +39,26 @@
 {% endif %}
 
 <section class="source-view-section">
-  <h2 class="source-view-h2">Executive summary</h2>
+  <h2 class="source-view-h2">Why this may matter</h2>
   <div class="lead-report-prose">{{ report.executive_summary or '—' }}</div>
 </section>
 
 <section class="source-view-section">
-  <h2 class="source-view-h2">Collaboration routes</h2>
+  <h2 class="source-view-h2">Suggested paths</h2>
   {% if collaboration_routes %}
   <ol class="lead-report-route-list">
     {% for route in collaboration_routes %}
     <li>
-      <strong>{{ route.title or 'Route' }}</strong>
+      <strong>{{ route.title or 'Path' }}</strong>
       <p class="lead-report-prose">{{ route.why or '' }}</p>
       {% if route.next_step %}<p class="muted"><strong>Next:</strong> {{ route.next_step }}</p>{% endif %}
-      {% if route.hub_evidence_refs %}<p class="muted mono">Hub CONTENT_ITEM_IDs: {{ route.hub_evidence_refs | join(', ') }}</p>{% endif %}
-      {% if route.target_evidence_refs %}<p class="muted mono">Target CONTENT_ITEM_IDs: {{ route.target_evidence_refs | join(', ') }}</p>{% endif %}
+      {% if route.hub_evidence_refs %}<p class="muted mono">Hub content IDs: {{ route.hub_evidence_refs | join(', ') }}</p>{% endif %}
+      {% if route.target_evidence_refs %}<p class="muted mono">Target content IDs: {{ route.target_evidence_refs | join(', ') }}</p>{% endif %}
     </li>
     {% endfor %}
   </ol>
   {% else %}
-  <p class="muted">None recorded yet (run may have failed or produced an empty list).</p>
+  <p class="muted">None recorded yet. The run may still be queued or may have failed.</p>
   {% endif %}
 </section>
 
@@ -81,12 +81,12 @@
 <section class="source-view-section">
   <h2 class="source-view-h2">Review</h2>
   {% if report.status in ('queued', 'running') %}
-  <p class="muted">Mark as reviewed is available after this report finishes (current status: <strong>{{ report.status }}</strong>).</p>
-  <form method="post" action="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" class="admin-form" onsubmit="return confirm('Delete lead report {{ report.id }}?');">
+  <p class="muted">Review is available after this candidate finishes (current status: <strong>{{ report.status }}</strong>).</p>
+  <form method="post" action="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" class="admin-form" onsubmit="return confirm('Delete lead candidate {{ report.id }}?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <div class="form-submit-row">
       <div class="form-submit-primary-actions">
-        <button type="submit" class="danger-btn">Delete report</button>
+        <button type="submit" class="danger-btn">Delete candidate</button>
       </div>
     </div>
   </form>
@@ -103,7 +103,7 @@
     <div class="form-submit-row">
       <div class="form-submit-primary-actions">
         <button type="submit" class="disapprove-btn" name="clear_reviewed" value="1">Clear reviewed</button>
-        <button type="submit" class="danger-btn" formaction="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" formmethod="post" formnovalidate onclick="return confirm('Delete lead report {{ report.id }}?');">Delete report</button>
+        <button type="submit" class="danger-btn" formaction="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" formmethod="post" formnovalidate onclick="return confirm('Delete lead candidate {{ report.id }}?');">Delete candidate</button>
       </div>
     </div>
   </form>
@@ -112,17 +112,17 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <div class="field-group">
       <label class="field-label" for="review_notes">Notes <span class="muted">(optional)</span></label>
-      <textarea name="review_notes" id="review_notes" class="field-input field-input-multiline" rows="5" cols="72" placeholder="Internal notes about this report…"></textarea>
+      <textarea name="review_notes" id="review_notes" class="field-input field-input-multiline" rows="5" cols="72" placeholder="Internal notes about this candidate..."></textarea>
     </div>
     <div class="form-submit-row">
       <div class="form-submit-primary-actions">
-        <button type="submit" class="primary-btn">Mark as reviewed</button>
-        <button type="submit" class="danger-btn" formaction="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" formmethod="post" formnovalidate onclick="return confirm('Delete lead report {{ report.id }}?');">Delete report</button>
+        <button type="submit" class="primary-btn">Mark reviewed</button>
+        <button type="submit" class="danger-btn" formaction="{{ url_for('admin.lead_reports_delete', rid=report.id) }}" formmethod="post" formnovalidate onclick="return confirm('Delete lead candidate {{ report.id }}?');">Delete candidate</button>
       </div>
     </div>
   </form>
   {% endif %}
 </section>
 
-<p class="admin-form-foot"><a href="{{ url_for('admin.leads_list') }}#lead-reports-section" class="back-link">&larr; Back to Leads</a></p>
+<p class="admin-form-foot"><a href="{{ url_for('admin.leads_list') }}#lead-candidates-section" class="back-link">&larr; Back to Leads</a></p>
 {% endblock %}

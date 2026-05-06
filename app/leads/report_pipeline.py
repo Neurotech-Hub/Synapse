@@ -217,7 +217,7 @@ def _run_person_report(report: LeadReport, *, hub_org_id: int) -> None:
     if person is None:
         raise ValueError("Target person missing")
 
-    set_lead_report_phase("Person report: loading hub persona + gathering target evidence…")
+    set_lead_report_phase("Person candidate: loading hub persona + recent target evidence...")
     hp = load_hub_persona()
 
     owned_items, target_evidence_block, persona_json_str = _person_target_block(person)
@@ -244,7 +244,7 @@ def _run_person_report(report: LeadReport, *, hub_org_id: int) -> None:
         .replace("{{target_evidence}}", target_evidence_block or "(empty)")
     )
 
-    set_lead_report_phase("Person report: single-pass synthesis (LLM)…")
+    set_lead_report_phase("Person candidate: single-pass synthesis...")
     data = run_lead_report_llm(prompt_raw, json_format=True)
     if data is None:
         raise RuntimeError("Synthesis LLM returned no usable JSON — try SYNAPSE_LEAD_REPORT_NUM_CTX.")
@@ -284,11 +284,11 @@ def _run_person_report(report: LeadReport, *, hub_org_id: int) -> None:
 def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> None:
     org_ids, subject_label = _organization_ids_for_report(report)
     if not subject_label:
-        raise ValueError("Report has no organization, building, or region target.")
+        raise ValueError("Lead candidate has no organization, building, or region target.")
 
     people, roster = _people_roster_for_orgs(org_ids, hub_organization_id=int(hub_org_id))
 
-    set_lead_report_phase("Organization / building / region report: loading hub persona + roster…")
+    set_lead_report_phase("Organization / building / region candidate: loading hub persona + roster...")
     hub_context = hub_persona_context_block()
     allowed_people_ids = {p.id for p in people}
 
@@ -307,7 +307,7 @@ def _run_org_building_region_report(report: LeadReport, *, hub_org_id: int) -> N
         .replace("{{people_roster}}", roster)
     )
 
-    set_lead_report_phase("Organization / building / region report: rollup (LLM)…")
+    set_lead_report_phase("Organization / building / region candidate: rollup synthesis...")
     data = run_lead_report_llm(prompt, json_format=True)
     if data is None or not isinstance(data, dict):
         raise RuntimeError("Organization rollup LLM returned no usable JSON/object.")
@@ -378,7 +378,7 @@ def run_lead_report_job(report_id: int) -> None:
         hub_oid = effective_hub_organization_id(report)
         if hub_oid is None:
             raise ValueError(
-                "Set Hub corpus organization on the report or under Leads → Hub settings before running."
+                "Set Hub corpus organization on the candidate or under Leads settings before running."
             )
 
         report.hub_organization_id = int(hub_oid)
@@ -393,7 +393,7 @@ def run_lead_report_job(report_id: int) -> None:
         ):
             _run_org_building_region_report(report, hub_org_id=hub_oid)
         else:
-            raise ValueError("Report has no target subject.")
+            raise ValueError("Lead candidate has no target subject.")
 
         report.status = "ok"
         report.completed_at = datetime.now(timezone.utc)

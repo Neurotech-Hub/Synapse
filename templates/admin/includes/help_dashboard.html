@@ -7,8 +7,8 @@
   <p class="admin-tip-p">Editing sources, subjects, or ownership marks persona rows <code>stale</code> without auto-running heavy LLM work. Persona rebuilds read <strong>ingested content</strong> from owned sources — if everything is still empty, use <strong>Poll now</strong> first. The identities card labels rows <strong>Polling first</strong> until at least one content item exists on owned eligible sources. <strong>Rebuild all</strong> runs a bounded batch of poll-ready stale subjects each click — batch size follows <code>SYNAPSE_DASH_IDENTITY_BATCH</code> (or the source-save identity burst fallback) — skips <strong>Polling first</strong> rows — and is disabled when the <code>stale</code> count is zero or while a poll is running. Use per-row <strong>Rebuild</strong> for individual subjects anytime.</p>
 </section>
 <section class="admin-tip-sec">
-  <h3 class="admin-tip-h">Lead reports</h3>
-  <p class="admin-tip-p">Queue targeted Hub-vs-subject synthesis from <a href="{{ url_for('admin.leads_list') }}">Leads</a>. Job output is logged as <code>[lead-report]</code> (shown on that page).</p>
+  <h3 class="admin-tip-h">Lead candidates</h3>
+  <p class="admin-tip-p">Queue recent-content-biased Hub synthesis from <a href="{{ url_for('admin.leads_list') }}">Leads</a>. Job output is logged as <code>[lead-candidate]</code> on that page.</p>
 </section>
 <section class="admin-tip-sec">
   <h3 class="admin-tip-h">Sources awaiting approval</h3>

@@ -121,6 +121,44 @@ body.public {
   color: var(--text-soft);
 }
 
+.public-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-top: 1.35rem;
+}
+
+.public-link-pill,
+.public-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.68);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.public-link-pill:hover,
+.public-chip:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.public-link-pill--dark {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.public-link-pill--dark:hover {
+  background: var(--accent-hover);
+}
+
 /* Composer card (prompt surface) */
 .composer-panel {
   margin-top: 0;
@@ -350,6 +388,7 @@ body.public {
 .public-nav {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.35rem 1rem;
   font-size: 0.9375rem;
   font-weight: 500;
@@ -369,6 +408,63 @@ body.public {
 .public-nav-link.is-active {
   color: var(--text);
   border-bottom-color: var(--text);
+}
+
+.public-nav-search {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.public-nav-search-toggle {
+  width: 2.15rem;
+  height: 2.15rem;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.public-nav-search-toggle:hover,
+.public-nav-search.is-open .public-nav-search-toggle {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(20, 20, 20, 0.16);
+  color: var(--text);
+}
+
+.public-nav-search-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: 0 0 auto;
+}
+
+.public-nav-search-input {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  pointer-events: none;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 999px;
+  padding: 0.5rem 0;
+  font: inherit;
+  background: rgba(255, 255, 255, 0.82);
+  transition: width 0.18s ease, opacity 0.18s ease, padding 0.18s ease;
+}
+
+.public-nav-search.is-open .public-nav-search-input,
+.public-nav-search-input:not(:placeholder-shown) {
+  width: min(14rem, 38vw);
+  opacity: 1;
+  pointer-events: auto;
+  padding: 0.5rem 0.8rem;
 }
 
 /* ----- Public browse / Latest ----- */
@@ -596,6 +692,12 @@ body.public {
   gap: 0.85rem;
 }
 
+.public-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .public-related-card {
   padding: 1rem;
   border: 1px solid var(--stroke);
@@ -717,6 +819,14 @@ body.public {
 
 .public-section {
   margin-bottom: 2rem;
+}
+
+.public-stewardship-note {
+  margin-top: 3rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.48);
 }
 
 .public-muted {

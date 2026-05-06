@@ -1,4 +1,4 @@
-"""Hub-centric lead reports (admin CRUD + review hooks)."""
+"""Hub-centric lead candidates (admin CRUD + review hooks)."""
 
 import os
 from unittest.mock import patch
@@ -48,16 +48,16 @@ def _login(client):
     )
 
 
-def test_lead_report_new_get_redirects_to_leads_modal(client):
+def test_lead_candidate_new_get_redirects_to_leads_modal(client):
     _login(client)
-    r = client.get("/admin/leads/reports/new", follow_redirects=False)
+    r = client.get("/admin/leads/candidates/new", follow_redirects=False)
     assert r.status_code == 302
     loc = r.headers.get("Location") or ""
     assert "/admin/leads" in loc
-    assert "open_report_modal=1" in loc
+    assert "open_candidate_modal=1" in loc
 
 
-def test_lead_report_enqueue_without_background_runner(app, client):
+def test_lead_candidate_enqueue_without_background_runner(app, client):
     with app.app_context():
         o = Organization(slug="huborg", display_name="Hub Org", notes=None, is_hub=True)
         p = Person(slug="subj_one", display_name="Subject Person", notes=None)
@@ -68,7 +68,7 @@ def test_lead_report_enqueue_without_background_runner(app, client):
     _login(client)
     with patch("app.web.admin.routes.start_background_lead_report", return_value=(True, "")):
         r = client.post(
-            "/admin/leads/reports/new",
+            "/admin/leads/candidates/new",
             data={"subject_kind": "person", "target_person_id": str(pid)},
             follow_redirects=True,
         )
@@ -82,7 +82,7 @@ def test_lead_report_enqueue_without_background_runner(app, client):
         rid = rep.id
 
     r2 = client.post(
-        f"/admin/leads/reports/{rid}/review",
+        f"/admin/leads/candidates/{rid}/review",
         data={"review_notes": "Looks good"},
         follow_redirects=True,
     )
@@ -141,7 +141,7 @@ def test_people_roster_excludes_hub_org_members(app):
         assert int(p_hub.id) in {p.id for p in people2}
 
 
-def test_person_delete_blocked_by_lead_report(app, client):
+def test_person_delete_blocked_by_lead_candidate(app, client):
     with app.app_context():
         p = Person(slug="blockme", display_name="Block Delete", notes=None)
         db.session.add(p)
@@ -153,6 +153,6 @@ def test_person_delete_blocked_by_lead_report(app, client):
     _login(client)
     r = client.post(f"/admin/people/{pid}/delete", follow_redirects=True)
     assert r.status_code == 200
-    assert b"Delete lead reports" in r.data
+    assert b"Delete lead candidates" in r.data
     with app.app_context():
         assert db.session.get(Person, pid) is not None

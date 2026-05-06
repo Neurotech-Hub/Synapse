@@ -40,24 +40,22 @@ def test_validate_effort_output_rejects_invalid_enum():
 
 def test_validate_clamps_scores_and_records_warning():
     result = validate_prompt_json(
-        "match_funding_to_entity",
+        "funding_public_card",
         {
             "schema_version": "1.0",
-            "match_score": 1.4,
-            "rationale": "Strong fit.",
-            "recommended_next_step": "review",
+            "display_title": "Pilot",
+            "short_summary": "Short",
+            "effort_label": "mild",
             "confidence": -0.2,
-            "supporting_points": [],
-            "concerns": [],
-            "missing_information": [],
+            "best_for": [],
+            "tags": [],
             "warnings": [],
         },
     )
 
     assert result.ok
-    assert result.data["match_score"] == 1.0
     assert result.data["confidence"] == 0.0
-    assert len(result.warnings) == 2
+    assert len(result.warnings) == 1
 
 
 def test_parse_and_validate_tolerates_fenced_json():
@@ -71,8 +69,8 @@ def test_parse_and_validate_tolerates_fenced_json():
 
 
 def test_validation_reports_missing_fields():
-    result = validate_prompt_json("collaboration_hypothesis", {"schema_version": "1.0", "confidence": 0.5})
+    result = validate_prompt_json("funding_public_card", {"schema_version": "1.0", "confidence": 0.5})
 
     assert not result.ok
-    assert "Missing required field: title." in result.errors
-    assert "Missing required field: recommended_action." in result.errors
+    assert "Missing required field: display_title." in result.errors
+    assert "Missing required field: short_summary." in result.errors

@@ -51,6 +51,6 @@ def test_prompt_fingerprint_changes_with_versioned_inputs():
 
 
 def test_provider_override(monkeypatch):
-    assert get_prompt_spec("collaboration_hypothesis").default_provider == "openai"
-    monkeypatch.setenv("SYNAPSE_LLM_COLLABORATION_HYPOTHESIS_PROVIDER", "ollama")
-    assert effective_prompt_provider("collaboration_hypothesis") == "ollama"
+    assert get_prompt_spec("public_entity_summary").default_provider == "ollama"
+    monkeypatch.setenv("SYNAPSE_LLM_PUBLIC_ENTITY_SUMMARY_PROVIDER", "openai")
+    assert effective_prompt_provider("public_entity_summary") == "openai"
