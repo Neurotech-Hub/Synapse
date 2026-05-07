@@ -47,6 +47,7 @@ def test_validate_clamps_scores_and_records_warning():
             "short_summary": "Short",
             "effort_label": "mild",
             "confidence": -0.2,
+            "not_enough_information": False,
             "best_for": [],
             "tags": [],
             "warnings": [],
@@ -60,7 +61,7 @@ def test_validate_clamps_scores_and_records_warning():
 
 def test_parse_and_validate_tolerates_fenced_json():
     raw = """```json
-{"schema_version":"1.0","display_title":"Pilot","short_summary":"Short","effort_label":"mild","confidence":0.9,"best_for":[],"tags":[],"warnings":[]}
+{"schema_version":"1.0","display_title":"Pilot","short_summary":"Short","effort_label":"mild","confidence":0.9,"not_enough_information":false,"best_for":[],"tags":[],"missing_information":[],"warnings":[]}
 ```"""
     result = parse_and_validate_prompt_json("funding_public_card", raw)
 

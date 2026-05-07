@@ -2,10 +2,11 @@
 {% import "admin/includes/help_macros.html" as syn_help %}
 {% block title %}Funding detail{% endblock %}
 {% block body %}
+{% set public_ready_card = (funding.synthesized_json or {}).get("public_ready_card") %}
+{% set public_ready_status = (funding.synthesized_json or {}).get("public_ready_status") %}
 <header class="page-head">
   <h1>{{ funding.title }}</h1>
   <div class="page-head-actions">
-    <a href="{{ url_for('admin.funding_edit', funding_id=funding.id) }}" class="primary-btn-inline">Edit</a>
     {% call syn_help.tips_bubble() %}{% include "admin/includes/help_funding_detail.html" %}{% endcall %}
   </div>
 </header>
@@ -17,144 +18,193 @@
   {% if funding.synthesis_status in ("needs_review", "failed") %}<span class="badge badge-muted">LLM generated</span>{% endif %}
 </p>
 
-{% set funding_stage = "Published" if funding.is_public and funding.is_reviewed and funding.status == "active" else ("Archived" if funding.status == "archived" else ("Needs source" if not funding.raw_text else ("Ready to publish" if funding.is_reviewed and not funding.is_public else ("Needs review" if funding.synthesized_json else "Needs draft")))) %}
+{% set funding_stage = "Published" if funding.is_public and funding.is_reviewed and funding.status == "active" else ("Archived" if funding.status == "archived" else ("Generation failed" if funding.synthesis_status == "failed" else ("Needs more context" if public_ready_status == "needs_more_context" else ("Public-ready" if funding.is_reviewed and funding.is_public else "Needs OpenAI")))) %}
 <section class="source-view-section admin-status-card">
   <div>
-    <p class="admin-preview-card-kicker">Funding workflow</p>
+    <p class="admin-preview-card-kicker">Funding status</p>
     <h2 class="source-view-h2">{{ funding_stage }}</h2>
-    <p class="muted">Can this opportunity become a useful public card or lead-generation signal?</p>
+    <p class="muted">Upload CSV rows first, then manually ask OpenAI to generate public-ready funding cards.</p>
   </div>
   <div class="form-submit-row">
-    {% if not funding.raw_text %}
-    <form method="post" action="{{ url_for('admin.funding_fetch_source', funding_id=funding.id) }}" class="inline-form">
+    <form method="post" action="{{ url_for('admin.funding_generate_public_card', funding_id=funding.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="primary-btn">Read from source link</button>
+      <button type="submit" class="primary-btn">Generate public-ready card with OpenAI</button>
     </form>
-    <a href="{{ url_for('admin.funding_edit', funding_id=funding.id) }}" class="primary-btn-inline">Edit manually</a>
-    {% elif not funding.synthesized_json %}
-    <form method="post" action="{{ url_for('admin.funding_synthesize', funding_id=funding.id) }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="primary-btn">Create review draft</button>
-    </form>
-    <a href="{{ url_for('admin.funding_edit', funding_id=funding.id) }}" class="primary-btn-inline">Edit manually</a>
-    {% elif not funding.is_reviewed %}
-    <a href="#synthesis-review" class="primary-btn">Review draft</a>
-    <form method="post" action="{{ url_for('admin.funding_discard_synthesis', funding_id=funding.id) }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="secondary-btn-inline">Discard draft</button>
-    </form>
-    {% elif funding.is_reviewed and not funding.is_public %}
-    <form method="post" action="{{ url_for('admin.funding_publish', funding_id=funding.id) }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="primary-btn">Publish card</button>
-    </form>
-    <a href="{{ url_for('public.funding_detail', slug=funding.slug) }}" target="_blank" rel="noopener" class="primary-btn-inline">Preview public card</a>
-    {% else %}
+    {% if funding.is_public and funding.is_reviewed %}
     <a href="{{ url_for('public.funding_detail', slug=funding.slug) }}" target="_blank" rel="noopener" class="primary-btn">Preview public page</a>
     {% endif %}
   </div>
 </section>
 
-<table class="tbl tbl-compact">
-  <tbody>
-    <tr><th>Slug</th><td class="mono">{{ funding.slug }}</td></tr>
-    <tr><th>External ID</th><td>{{ funding.external_id or "—" }}</td></tr>
-    <tr><th>Sponsor</th><td>{{ funding.sponsor_name or "—" }}</td></tr>
-    <tr>
-      <th>Source</th>
-      <td>
-        {% if funding.source_url %}
-        <a href="{{ funding.source_url }}" target="_blank" rel="noopener">{{ funding.source_url }}</a>
-        {% else %}—{% endif %}
-      </td>
-    </tr>
-    <tr><th>Deadline</th><td>{{ funding.deadline_date or funding.deadline_text or "—" }}</td></tr>
-    <tr><th>Amount</th><td>{{ funding.amount_text or "—" }}</td></tr>
-    <tr><th>Mechanism</th><td>{{ funding.mechanism or "—" }}</td></tr>
-    <tr>
-      <th>Effort</th>
-      <td>
+{% if funding.synthesis_error %}
+<section class="review-banner review-banner--approve" aria-label="OpenAI status">
+  <p class="review-banner-text">{{ funding.synthesis_error }}</p>
+</section>
+{% endif %}
+
+{% if latest_llm_run and latest_llm_run.status in ("failed", "validation_failed") %}
+<section class="review-banner review-banner--approve" aria-label="Latest OpenAI error">
+  <p class="review-banner-text">
+    Latest OpenAI run failed: {{ latest_llm_run.error_message or (latest_llm_run.validation_errors_json | join("; ")) or latest_llm_run.status }}
+  </p>
+</section>
+{% endif %}
+
+<section class="funding-detail-card" aria-label="Funding details">
+  <div class="funding-detail-card-head">
+    <div>
+      <p class="admin-preview-card-kicker">Funding details</p>
+      <h2 class="source-view-h2">Source and review facts</h2>
+    </div>
+    <p class="funding-detail-updated">Updated {{ funding.updated_at|local_dt }}</p>
+  </div>
+  <dl class="funding-detail-grid">
+    <div class="funding-detail-item">
+      <dt>Slug</dt>
+      <dd class="mono">{{ funding.slug }}</dd>
+    </div>
+    <div class="funding-detail-item">
+      <dt>External ID</dt>
+      <dd>{{ funding.external_id or "—" }}</dd>
+    </div>
+    <div class="funding-detail-item funding-detail-item--wide">
+      <dt>Sponsor</dt>
+      <dd>{{ funding.sponsor_name or "—" }}</dd>
+    </div>
+    <div class="funding-detail-item">
+      <dt>Deadline</dt>
+      <dd>{{ funding.deadline_date or funding.deadline_text or "—" }}</dd>
+    </div>
+    <div class="funding-detail-item">
+      <dt>Amount</dt>
+      <dd>{{ funding.amount_text or "—" }}</dd>
+    </div>
+    <div class="funding-detail-item">
+      <dt>Mechanism</dt>
+      <dd>{{ funding.mechanism or "—" }}</dd>
+    </div>
+    <div class="funding-detail-item">
+      <dt>Effort</dt>
+      <dd>
         <span class="badge badge-muted">{{ funding.effort_index }}</span>
-        {% if funding.effort_score is not none %} score {{ funding.effort_score | round(2) }}{% endif %}
-        {% if funding.effort_confidence is not none %} · confidence {{ (funding.effort_confidence * 100) | round | int }}%{% endif %}
-        {% if funding.effort_reviewed_at %} · reviewed {{ funding.effort_reviewed_at|local_dt("date") }}{% endif %}
-      </td>
-    </tr>
-    <tr><th>Topic tags</th><td>{{ (funding.topic_tags_json or []) | join("; ") or "—" }}</td></tr>
-    <tr><th>Method tags</th><td>{{ (funding.method_tags_json or []) | join("; ") or "—" }}</td></tr>
-    <tr>
-      <th>Fetch</th>
-      <td>
+        {% if funding.effort_score is not none %}<span class="funding-detail-meta">score {{ funding.effort_score | round(2) }}</span>{% endif %}
+        {% if funding.effort_confidence is not none %}<span class="funding-detail-meta">confidence {{ (funding.effort_confidence * 100) | round | int }}%</span>{% endif %}
+        {% if funding.effort_reviewed_at %}<span class="funding-detail-meta">reviewed {{ funding.effort_reviewed_at|local_dt("date") }}</span>{% endif %}
+      </dd>
+    </div>
+    <div class="funding-detail-item funding-detail-item--wide">
+      <dt>Source</dt>
+      <dd>
+        {% if funding.source_url %}
+          <a class="funding-detail-url" href="{{ funding.source_url }}" target="_blank" rel="noopener">{{ funding.source_url }}</a>
+        {% else %}—{% endif %}
+      </dd>
+    </div>
+    <div class="funding-detail-item funding-detail-item--wide">
+      <dt>Topic tags</dt>
+      <dd>{{ (funding.topic_tags_json or []) | join("; ") or "—" }}</dd>
+    </div>
+    <div class="funding-detail-item funding-detail-item--wide">
+      <dt>Method tags</dt>
+      <dd>{{ (funding.method_tags_json or []) | join("; ") or "—" }}</dd>
+    </div>
+    <div class="funding-detail-item funding-detail-item--wide">
+      <dt>Fetch</dt>
+      <dd>
         {% if funding.fetched_at %}
-          {{ funding.fetched_at|local_dt("datetime") }}
-          {% if funding.source_url_final %} · final: <a href="{{ funding.source_url_final }}" target="_blank" rel="noopener">{{ funding.source_url_final }}</a>{% endif %}
-          {% if funding.fetch_status_code %} · HTTP {{ funding.fetch_status_code }}{% endif %}
-          {% if funding.fetch_content_type %} · {{ funding.fetch_content_type }}{% endif %}
-          {% if funding.source_text_chars %} · {{ funding.source_text_chars }} chars{% endif %}
-          {% if funding.raw_text_hash %} · <span class="mono">{{ funding.raw_text_hash[:12] }}</span>{% endif %}
+          <span>{{ funding.fetched_at|local_dt("datetime") }}</span>
+          {% if funding.source_url_final %}<span class="funding-detail-meta">final: <a class="funding-detail-url" href="{{ funding.source_url_final }}" target="_blank" rel="noopener">{{ funding.source_url_final }}</a></span>{% endif %}
+          {% if funding.fetch_status_code %}<span class="funding-detail-meta">HTTP {{ funding.fetch_status_code }}</span>{% endif %}
+          {% if funding.fetch_content_type %}<span class="funding-detail-meta">{{ funding.fetch_content_type }}</span>{% endif %}
+          {% if funding.source_text_chars %}<span class="funding-detail-meta">{{ funding.source_text_chars }} chars</span>{% endif %}
+          {% if funding.raw_text_hash %}<span class="funding-detail-meta mono">{{ funding.raw_text_hash[:12] }}</span>{% endif %}
         {% elif funding.fetch_error %}
           <span class="badge bad">failed</span> {{ funding.fetch_error }}
         {% else %}
           —
         {% endif %}
-      </td>
-    </tr>
-    <tr><th>Updated</th><td>{{ funding.updated_at|local_dt }}</td></tr>
-  </tbody>
-</table>
-
-<section class="source-view-section">
-  <h2 class="source-view-h2">Review fields</h2>
-  <details open>
-    <summary>Public summary</summary>
-    <p>{{ funding.summary_public or "No public summary yet." }}</p>
-  </details>
-  <details>
-    <summary>Eligibility</summary>
-    <p>{{ funding.eligibility_summary or "No eligibility summary yet." }}</p>
-  </details>
-  <details>
-    <summary>Private summary</summary>
-    <p>{{ funding.summary_private or "No private summary yet." }}</p>
-  </details>
+      </dd>
+    </div>
+  </dl>
 </section>
 
-{% if funding.effort_rationale %}
+<section class="source-view-section funding-readable-section">
+  <h2 class="source-view-h2">Public card</h2>
+  <div class="funding-readable-grid">
+    <article class="funding-readable-card funding-readable-card--primary">
+      <p class="admin-preview-card-kicker">Public summary</p>
+      <p>{{ funding.summary_public or "No public summary yet." }}</p>
+    </article>
+    <article class="funding-readable-card">
+      <p class="admin-preview-card-kicker">Eligibility</p>
+      <p>{{ funding.eligibility_summary or "No eligibility summary yet." }}</p>
+    </article>
+    <article class="funding-readable-card">
+      <p class="admin-preview-card-kicker">Private summary</p>
+      <p>{{ funding.summary_private or "No private summary yet." }}</p>
+    </article>
+  </div>
+</section>
+
+{% if public_ready_card %}
 <section class="source-view-section">
+  <h2 class="source-view-h2">OpenAI output</h2>
+  <article class="admin-preview-card">
+    <p class="admin-preview-card-kicker">Confidence: {% if public_ready_card.get("confidence") is not none %}{{ ((public_ready_card.get("confidence") | float) * 100) | round | int }}%{% else %}—{% endif %}</p>
+    <h3 class="admin-preview-card-title">{{ public_ready_card.get("display_title") or funding.title }}</h3>
+    <p class="admin-preview-card-body">{{ public_ready_card.get("short_summary") or "—" }}</p>
+    {% if public_ready_card.get("missing_information") %}
+    <p class="admin-preview-card-meta">Missing: {{ public_ready_card.get("missing_information") | join("; ") }}</p>
+    {% endif %}
+    {% if public_ready_card.get("warnings") %}
+    <p class="admin-preview-card-meta">Warnings: {{ public_ready_card.get("warnings") | join("; ") }}</p>
+    {% endif %}
+  </article>
+</section>
+{% endif %}
+
+{% if funding.effort_rationale %}
+<section class="source-view-section funding-readable-section">
   <h2 class="source-view-h2">Effort</h2>
-  <details open>
-    <summary>Rationale</summary>
+  <article class="funding-readable-card">
+    <p class="admin-preview-card-kicker">Rationale</p>
     <p>{{ funding.effort_rationale }}</p>
-  </details>
+  </article>
 </section>
 {% endif %}
 
 {% if funding.effort_signals_json %}
-<details>
-  <summary>Effort signals</summary>
-  <ul>
+<section class="source-view-section funding-readable-section">
+  <h2 class="source-view-h2">Effort signals</h2>
+  <article class="funding-readable-card">
+    <ul class="funding-readable-list">
     {% for signal in funding.effort_signals_json %}
-    <li>{{ signal }}</li>
+      <li>{{ signal }}</li>
     {% endfor %}
-  </ul>
-</details>
+    </ul>
+  </article>
+</section>
 {% endif %}
 
 {% if funding.notes_private %}
-<h2 class="source-view-h2">Private notes</h2>
-<p>{{ funding.notes_private }}</p>
+<section class="source-view-section funding-readable-section">
+  <h2 class="source-view-h2">Private notes</h2>
+  <article class="funding-readable-card">
+    <p>{{ funding.notes_private }}</p>
+  </article>
+</section>
 {% endif %}
 
-{% if funding.raw_text %}
-<details>
-  <summary>Raw imported text</summary>
-  <pre class="mono">{{ funding.raw_text }}</pre>
-</details>
-{% endif %}
-
-<details class="source-view-section">
-  <summary>Advanced Tools</summary>
-  <div class="form-submit-row">
+<section class="source-view-section funding-maintenance-card">
+  <div class="funding-maintenance-head">
+    <div>
+      <p class="admin-preview-card-kicker">Maintenance</p>
+      <h2 class="source-view-h2">Admin actions</h2>
+    </div>
+    <p class="muted">Review, refresh, publish, or archive this opportunity.</p>
+  </div>
+  <div class="form-submit-row funding-maintenance-actions">
+    <a href="{{ url_for('admin.funding_edit', funding_id=funding.id) }}" class="primary-btn-inline">Edit manually</a>
     {% if not funding.is_reviewed %}
     <form method="post" action="{{ url_for('admin.funding_review', funding_id=funding.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -174,11 +224,7 @@
     </form>
     <form method="post" action="{{ url_for('admin.funding_synthesize', funding_id=funding.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="primary-btn-inline" {% if not funding.raw_text %}disabled{% endif %}>Create review draft</button>
-    </form>
-    <form method="post" action="{{ url_for('admin.funding_regenerate_public_card', funding_id=funding.id) }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="primary-btn-inline">Rewrite public summary</button>
+      <button type="submit" class="primary-btn-inline">Generate public-ready card</button>
     </form>
     <form method="post" action="{{ url_for('admin.funding_publish', funding_id=funding.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -190,84 +236,19 @@
       <button type="submit" class="danger-btn" onclick="return confirm('Archive this funding opportunity?');">Archive</button>
     </form>
   </div>
-</details>
+  {% if funding.raw_text %}
+  <section class="funding-raw-text-section" aria-label="Raw source text">
+    <h3 class="funding-subsection-title">Raw source text</h3>
+    <pre class="mono funding-raw-text">{{ funding.raw_text }}</pre>
+  </section>
+  {% endif %}
+</section>
 
 {% if funding.fetch_error %}
 <form method="post" action="{{ url_for('admin.funding_clear_fetch_error', funding_id=funding.id) }}" class="inline-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
   <button type="submit" class="linkish">Clear fetch error</button>
 </form>
-{% endif %}
-
-{% if latest_llm_run %}
-<p class="contextual-note">
-  Latest LLM run: <strong>{{ latest_llm_run.status }}</strong> · {{ latest_llm_run.prompt_name }}
-  {% if latest_llm_run.error_message %} · {{ latest_llm_run.error_message }}{% endif %}
-  {% if latest_llm_run.validation_errors_json %} · {{ latest_llm_run.validation_errors_json | join("; ") }}{% endif %}
-</p>
-{% endif %}
-
-{% if funding.synthesized_json %}
-<section class="source-view-section" id="synthesis-review">
-  <h2 class="source-view-h2">Synthesis review</h2>
-  <details open>
-    <summary>Current vs draft fields</summary>
-    <form method="post" action="{{ url_for('admin.funding_apply_synthesis', funding_id=funding.id) }}" class="admin-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <table class="tbl tbl-compact">
-        <thead><tr><th>Apply</th><th>Field</th><th>Status</th><th>Current</th><th>Draft</th></tr></thead>
-        <tbody>
-        {% for row in synthesis_diffs %}
-          <tr>
-            <td>{% if row.can_apply %}<input type="checkbox" name="fields" value="{{ row.field }}"/>{% else %}—{% endif %}</td>
-            <td>{{ row.label }}</td>
-            <td>
-              <span class="badge badge-muted">{{ row.status }}</span>
-              {% if row.is_manual %}<span class="badge ok">current value</span>{% endif %}
-            </td>
-            <td>{{ row.current_value if row.current_value not in (none, [], {}) else "—" }}</td>
-            <td>{{ row.draft_value if row.draft_value not in (none, [], {}) else "—" }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      <div class="form-submit-row">
-        <button type="submit" class="primary-btn-inline">Apply selected fields</button>
-      </div>
-    </form>
-  </details>
-  <div class="form-submit-row">
-    <form method="post" action="{{ url_for('admin.funding_effort_from_synthesis', funding_id=funding.id) }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="primary-btn-inline">Use draft effort</button>
-    </form>
-    <form method="post" action="{{ url_for('admin.funding_discard_synthesis', funding_id=funding.id) }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="danger-btn">Discard draft</button>
-    </form>
-  </div>
-  {% if funding.synthesized_json.get("public_card") %}
-  <details>
-    <summary>Public-card draft</summary>
-    {% set card = funding.synthesized_json.get("public_card") %}
-    <article class="admin-preview-card">
-      <p class="admin-preview-card-kicker">Funding · Effort: {{ (card.get("effort_label") or funding.effort_index or "unknown")|title }}</p>
-      <h3 class="admin-preview-card-title">{{ card.get("display_title") or funding.title }}</h3>
-      <p class="admin-preview-card-body">{{ card.get("short_summary") or "—" }}</p>
-      {% if card.get("best_for") %}
-      <p class="admin-preview-card-meta">Best for: {{ card.get("best_for") | join("; ") }}</p>
-      {% endif %}
-      {% if card.get("tags") %}
-      <p class="admin-preview-card-meta">{{ card.get("tags") | join(" · ") }}</p>
-      {% endif %}
-    </article>
-    <form method="post" action="{{ url_for('admin.funding_apply_public_card', funding_id=funding.id) }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <button type="submit" class="primary-btn-inline">Apply public-card copy</button>
-    </form>
-  </details>
-  {% endif %}
-</section>
 {% endif %}
 
 <p class="admin-form-foot"><a href="{{ url_for('admin.funding_list') }}" class="back-link">&larr; All funding</a></p>

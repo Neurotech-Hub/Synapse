@@ -43,6 +43,28 @@ def test_render_prompt_replaces_variables_and_requires_missing():
         render_prompt("funding_effort_classify", {"schema": {}})
 
 
+def test_render_prompt_preserves_json_backslash_sequences():
+    rendered = render_prompt(
+        "funding_public_card",
+        {
+            "funding_json": {
+                "title": "Unicode escaped source",
+                "source_context": r"contains JSON escape \u2013 from scraped text",
+            },
+            "schema": {
+                "schema_version": "1.0",
+                "display_title": "",
+                "short_summary": "",
+                "effort_label": "mild|moderate|heavy|unknown",
+                "confidence": 0.0,
+                "not_enough_information": False,
+            },
+        },
+    )
+
+    assert r"\u2013" in rendered
+
+
 def test_prompt_fingerprint_changes_with_versioned_inputs():
     one = prompt_input_fingerprint("funding_public_card", {"funding_json": {"title": "A"}, "schema": {}})
     two = prompt_input_fingerprint("funding_public_card", {"funding_json": {"title": "B"}, "schema": {}})

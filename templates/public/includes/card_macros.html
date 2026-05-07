@@ -72,6 +72,59 @@
 {% endif %}
 {% endmacro %}
 
+{% macro homepage_latest_grid(latest_groups) %}
+{% if latest_groups %}
+  <div class="public-home-latest-grid">
+    {% for card in latest_groups %}
+      {% set variant = 'featured' if loop.first else ('batch' if card.kind == 'batch' else ('accent' if loop.index is divisibleby 5 else 'compact')) %}
+      {% if card.kind == 'batch' %}
+        <article class="public-card public-card--reveal public-home-latest-card public-home-latest-card--{{ variant }}" style="--reveal-i: {{ loop.index0 }};">
+          <div class="public-home-latest-card-bar">
+            <span class="public-home-latest-chip public-home-latest-chip--amber">Source batch</span>
+            {% if card.meta_dt %}
+              <span class="public-home-latest-date">{{ card.meta_label }}: {{ card.meta_dt | local_dt('date') }}</span>
+            {% endif %}
+          </div>
+          <p class="public-card-kicker">{{ card.batch_items | length }} new from {{ (card.source.label or card.source.url) | truncate(48, True, '...') }}</p>
+          <ul class="public-card-batch-list public-home-latest-batch-list" role="list">
+            {% for it in card.batch_items %}
+              <li>
+                {% if it.link %}
+                  <a href="{{ it.link }}" rel="noopener noreferrer" target="_blank">{{ it.public_latest_card_title }}</a>
+                {% else %}
+                  {{ it.public_latest_card_title }}
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </article>
+      {% else %}
+        {% set it = card.item %}
+        <article class="public-card public-card--reveal public-home-latest-card public-home-latest-card--{{ variant }}" style="--reveal-i: {{ loop.index0 }};">
+          <div class="public-home-latest-card-bar">
+            <span class="public-home-latest-chip{% if variant == 'accent' %} public-home-latest-chip--terracotta{% endif %}">Signal</span>
+            {% if card.meta_dt %}
+              <span class="public-home-latest-date">{{ card.meta_label }}: {{ card.meta_dt | local_dt('date') }}</span>
+            {% endif %}
+          </div>
+          <p class="public-card-kicker">via {{ (it.source.label or it.source.url) | truncate(48, True, '...') }}</p>
+          <h3 class="public-card-title public-home-latest-title">
+            {% if it.link %}
+              <a href="{{ it.link }}" rel="noopener noreferrer" target="_blank">{{ it.public_latest_card_title }}</a>
+            {% else %}
+              {{ it.public_latest_card_title }}
+            {% endif %}
+          </h3>
+          {% if it.public_latest_card_snippet %}
+            <p class="public-card-snippet public-home-latest-snippet">{{ it.public_latest_card_snippet | truncate(260 if loop.first else 170, True, '...') }}</p>
+          {% endif %}
+        </article>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endif %}
+{% endmacro %}
+
 {# Inline IntersectionObserver fallback for the public-card--reveal animation.
    Call once per page that uses entity_card or public-card--reveal cards. #}
 {% macro reveal_script() %}

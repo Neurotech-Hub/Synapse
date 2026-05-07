@@ -69,7 +69,12 @@ def render_prompt(name: str, variables: dict[str, Any]) -> str:
         if placeholder not in variables:
             missing.append(placeholder)
             continue
-        rendered = re.sub(r"\{\{\s*" + re.escape(placeholder) + r"\s*\}\}", _stringify(variables[placeholder]), rendered)
+        # Use a callable replacement so JSON/raw text backslashes are inserted literally.
+        rendered = re.sub(
+            r"\{\{\s*" + re.escape(placeholder) + r"\s*\}\}",
+            lambda _match, value=variables[placeholder]: _stringify(value),
+            rendered,
+        )
     if missing:
         raise KeyError(f"Missing prompt variable(s) for {name}: {', '.join(missing)}")
     return rendered

@@ -28,9 +28,9 @@ from app.extensions import db
 from app.funding.effort import apply_effort_classification, classify_effort_heuristic
 from app.funding.fetch import fetch_funding_page_text
 from app.funding.synthesis import (
-    apply_funding_public_card,
     apply_funding_synthesis_draft,
     discard_funding_synthesis_draft,
+    generate_public_ready_funding_card,
     regenerate_funding_public_card,
     reclassify_effort_from_synthesis,
     synthesize_funding_from_raw_text,
@@ -1562,6 +1562,45 @@ def funding_list():
     )
 
 
+@admin_bp.route("/funding/generate-public-cards", methods=("POST",))
+@login_required
+def funding_generate_public_cards():
+    try:
+        limit = max(1, min(int(request.form.get("limit") or 10), 50))
+    except ValueError:
+        limit = 10
+    rows = (
+        FundingOpportunity.query.filter(
+            FundingOpportunity.status != "archived",
+            or_(
+                FundingOpportunity.is_reviewed.is_(False),
+                FundingOpportunity.is_public.is_(False),
+                FundingOpportunity.summary_public.is_(None),
+            ),
+        )
+        .order_by(FundingOpportunity.updated_at.desc(), FundingOpportunity.id.desc())
+        .limit(limit)
+        .all()
+    )
+    ok_count = 0
+    needs_context = 0
+    failed = 0
+    for funding in rows:
+        _fetch_source_context_for_generation(funding)
+        result = generate_public_ready_funding_card(funding, provider="openai", allow_openai=True)
+        if result.ok and funding.synthesis_status == "synthesized":
+            ok_count += 1
+        elif result.ok:
+            needs_context += 1
+        else:
+            failed += 1
+    flash(
+        f"OpenAI funding generation finished: {ok_count} public-ready, {needs_context} need more context, {failed} failed.",
+        "success" if failed == 0 else "info",
+    )
+    return redirect(url_for("admin.funding_list"))
+
+
 @admin_bp.route("/funding/new", methods=("GET", "POST"))
 @login_required
 def funding_new():
@@ -1720,25 +1759,61 @@ def funding_fetch_source(funding_id: int):
     return redirect(_safe_admin_redirect_target() or url_for("admin.funding_detail", funding_id=funding.id))
 
 
+def _fetch_source_context_for_generation(funding: FundingOpportunity) -> bool:
+    if not funding.source_url:
+        return False
+    result = fetch_funding_page_text(
+        funding.source_url,
+        timeout_sec=int(current_app.config.get("SYNAPSE_FUNDING_FETCH_TIMEOUT_SEC", 20)),
+        max_bytes=int(current_app.config.get("SYNAPSE_FUNDING_FETCH_MAX_BYTES", 2_000_000)),
+        max_chars=int(current_app.config.get("SYNAPSE_FUNDING_EXTRACT_MAX_CHARS", 60_000)),
+        allow_private_hosts=bool(current_app.config.get("SYNAPSE_FUNDING_FETCH_ALLOW_PRIVATE_HOSTS", False)),
+    )
+    funding.source_url_final = result.final_url
+    funding.fetch_status_code = result.status_code
+    funding.fetch_content_type = result.content_type
+    funding.fetch_error = result.error
+    funding.fetched_at = result.fetched_at or datetime.now(timezone.utc)
+    if result.page_text is not None:
+        funding.raw_text = result.page_text.text
+        funding.raw_text_hash = result.page_text.content_hash
+        funding.source_text_chars = len(result.page_text.text)
+        funding.synthesis_status = "fetched"
+    db.session.commit()
+    return bool(result.ok)
+
+
+@admin_bp.route("/funding/<int:funding_id>/generate-public-card", methods=("POST",))
+@login_required
+def funding_generate_public_card(funding_id: int):
+    funding = db.session.get(FundingOpportunity, funding_id)
+    if funding is None:
+        abort(404)
+    fetched = _fetch_source_context_for_generation(funding)
+    result = generate_public_ready_funding_card(
+        funding,
+        provider="openai",
+        allow_openai=True,
+    )
+    if result.ok and funding.synthesis_status == "synthesized":
+        msg = "OpenAI generated a public-ready funding card."
+        if funding.source_url and not fetched and funding.fetch_error:
+            msg += " Source fetch failed, so existing CSV/admin fields were used."
+        flash(msg, "success")
+    elif result.ok:
+        flash(funding.synthesis_error or "OpenAI needs more information before this can be public.", "info")
+    else:
+        flash("; ".join(result.errors) or funding.synthesis_error or "OpenAI funding generation failed.", "error")
+    return redirect(url_for("admin.funding_detail", funding_id=funding.id))
+
+
 @admin_bp.route("/funding/<int:funding_id>/synthesize", methods=("POST",))
 @login_required
 def funding_synthesize(funding_id: int):
     funding = db.session.get(FundingOpportunity, funding_id)
     if funding is None:
         abort(404)
-    if not funding.raw_text:
-        flash("Fetch or paste source text before synthesis.", "error")
-        return redirect(url_for("admin.funding_detail", funding_id=funding.id))
-    result = synthesize_funding_from_raw_text(
-        funding,
-        provider=(request.form.get("provider") or None),
-        allow_openai=(request.form.get("allow_openai") == "1"),
-    )
-    if result.ok:
-        flash("Funding synthesis draft created for review.", "success")
-    else:
-        flash("; ".join(result.errors) or "Funding synthesis failed.", "error")
-    return redirect(url_for("admin.funding_detail", funding_id=funding.id))
+    return funding_generate_public_card(funding_id)
 
 
 @admin_bp.route("/funding/<int:funding_id>/apply-synthesis", methods=("POST",))
@@ -1759,16 +1834,7 @@ def funding_regenerate_public_card(funding_id: int):
     funding = db.session.get(FundingOpportunity, funding_id)
     if funding is None:
         abort(404)
-    result = regenerate_funding_public_card(
-        funding,
-        provider=(request.form.get("provider") or None),
-        allow_openai=(request.form.get("allow_openai") == "1"),
-    )
-    if result.ok:
-        flash("Public-card draft regenerated for review.", "success")
-    else:
-        flash("; ".join(result.errors) or "Public-card regeneration failed.", "error")
-    return redirect(url_for("admin.funding_detail", funding_id=funding.id))
+    return funding_generate_public_card(funding_id)
 
 
 @admin_bp.route("/funding/<int:funding_id>/apply-public-card", methods=("POST",))
@@ -1777,8 +1843,7 @@ def funding_apply_public_card(funding_id: int):
     funding = db.session.get(FundingOpportunity, funding_id)
     if funding is None:
         abort(404)
-    changed = apply_funding_public_card(funding)
-    flash(f"Applied public-card fields: {', '.join(changed) if changed else 'none'}.", "success")
+    flash("Legacy funding action retired. Use Generate public-ready card with OpenAI.", "info")
     return redirect(url_for("admin.funding_detail", funding_id=funding.id))
 
 

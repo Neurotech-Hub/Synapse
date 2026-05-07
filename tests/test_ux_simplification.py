@@ -88,12 +88,12 @@ def test_funding_detail_stage_and_advanced_tools(app, client):
     _login(client)
     rv = client.get(f"/admin/funding/{funding_id}")
     assert rv.status_code == 200
-    assert b"Funding workflow" in rv.data
-    assert b"Needs source" in rv.data
-    assert b"Read from source link" in rv.data
-    assert b"Advanced Tools" in rv.data
+    assert b"Funding status" in rv.data
+    assert b"Needs OpenAI" in rv.data
+    assert b"Generate public-ready card with OpenAI" in rv.data
+    assert b"Maintenance" in rv.data
     assert b"Private" in rv.data
-    assert b"Needs review" in rv.data
+    assert b"Reviewed" not in rv.data
 
 
 def test_funding_publish_action_makes_reviewed_private_card_public(app, client):
@@ -114,7 +114,7 @@ def test_funding_publish_action_makes_reviewed_private_card_public(app, client):
     _login(client)
     detail = client.get(f"/admin/funding/{funding_id}")
     assert detail.status_code == 200
-    assert b"Ready to publish" in detail.data
+    assert b"Needs OpenAI" in detail.data
     assert b"Publish card" in detail.data
     assert f"/admin/funding/{funding_id}/review".encode() not in detail.data
 

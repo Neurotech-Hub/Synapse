@@ -1,4 +1,4 @@
-Create short public-facing funding copy from structured funding data.
+Create a public-ready funding card from structured funding data and optional scraped source context.
 
 Rules:
 - Be neutral, concise, and useful.
@@ -6,6 +6,8 @@ Rules:
 - Do not expose private Hub strategy, match scores, outreach logic, or inferred targets.
 - Mention effort in plain language.
 - Remind users to check the official source for details when appropriate.
+- If the supplied data is too sparse to create a trustworthy public card, set not_enough_information to true and explain missing_information.
+- Always include confidence as a 0.0-1.0 number.
 - Return valid JSON only.
 
 Funding data:

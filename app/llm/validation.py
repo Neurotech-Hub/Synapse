@@ -20,10 +20,10 @@ PROMPT_SCHEMAS: dict[str, dict[str, Any]] = {
         "list_fields": ("missing_information", "warnings"),
     },
     "funding_public_card": {
-        "required": COMMON_REQUIRED + ("display_title", "short_summary", "effort_label"),
+        "required": COMMON_REQUIRED + ("display_title", "short_summary", "effort_label", "not_enough_information"),
         "enums": {"effort_label": {"mild", "moderate", "heavy", "unknown"}},
         "scores": ("confidence",),
-        "list_fields": ("best_for", "tags", "warnings"),
+        "list_fields": ("best_for", "tags", "topic_tags", "method_tags", "missing_information", "warnings"),
     },
     "public_entity_summary": {
         "required": COMMON_REQUIRED + ("display_summary",),

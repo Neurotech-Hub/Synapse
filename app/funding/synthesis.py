@@ -44,6 +44,7 @@ def synthesize_funding_from_raw_text(
         source_type="funding",
         source_id=funding.id,
         allow_openai=allow_openai,
+        require_enabled=False,
         mock_provider=mock_provider,
     )
     if result.run is not None:
@@ -99,6 +100,7 @@ def regenerate_funding_public_card(
         source_type="funding",
         source_id=funding.id,
         allow_openai=allow_openai,
+        require_enabled=False,
         mock_provider=mock_provider,
     )
     payload = dict(funding.synthesized_json or {})
@@ -116,6 +118,101 @@ def regenerate_funding_public_card(
     else:
         funding.synthesis_status = "failed"
         funding.synthesis_error = "; ".join(result.errors) if result.errors else "Public-card regeneration failed."
+    db.session.commit()
+    return result
+
+
+def generate_public_ready_funding_card(
+    funding: FundingOpportunity,
+    *,
+    provider: str | None = "openai",
+    allow_openai: bool = True,
+    mock_provider=None,
+) -> LLMExecutionResult:
+    variables = {
+        "funding_json": {
+            "title": funding.title,
+            "external_id": funding.external_id,
+            "sponsor_name": funding.sponsor_name,
+            "source_url": funding.source_url_final or funding.source_url,
+            "source_type": funding.source_type,
+            "status": funding.status,
+            "deadline_date": funding.deadline_date.isoformat() if funding.deadline_date else None,
+            "deadline_text": funding.deadline_text,
+            "amount_min": funding.amount_min,
+            "amount_max": funding.amount_max,
+            "amount_text": funding.amount_text,
+            "mechanism": funding.mechanism,
+            "summary_public": funding.summary_public,
+            "summary_private": funding.summary_private,
+            "eligibility_summary": funding.eligibility_summary,
+            "topic_tags": funding.topic_tags_json or [],
+            "method_tags": funding.method_tags_json or [],
+            "effort_index": funding.effort_index,
+            "effort_rationale": funding.effort_rationale,
+            "admin_notes": funding.notes_private,
+            "source_context": (funding.raw_text or "")[:24_000],
+        },
+        "schema": {
+            "schema_version": "1.0",
+            "display_title": "Public display title",
+            "short_summary": "Concise public summary",
+            "eligibility_summary": "Short eligibility note or empty string",
+            "amount_text": "Amount text or empty string",
+            "deadline_text": "Deadline text or empty string",
+            "deadline_date": "YYYY-MM-DD or null",
+            "effort_label": "mild|moderate|heavy|unknown",
+            "effort_rationale": "Plain-language effort rationale",
+            "topic_tags": [],
+            "method_tags": [],
+            "confidence": 0.0,
+            "not_enough_information": False,
+            "missing_information": [],
+            "warnings": [],
+        },
+    }
+    result = execute_prompt(
+        "funding_public_card",
+        variables,
+        provider=provider,
+        source_type="funding",
+        source_id=funding.id,
+        allow_openai=allow_openai,
+        require_enabled=False,
+        mock_provider=mock_provider,
+    )
+    payload = dict(funding.synthesized_json or {})
+    if result.run is not None:
+        funding.synthesis_provider = result.run.provider
+        funding.synthesis_model = result.run.model_name
+        funding.synthesis_fingerprint = result.run.input_fingerprint
+    if result.ok and result.data:
+        card = _normalize_public_ready_card(result.data)
+        needs_more_context = _card_needs_more_context(card)
+        payload["public_ready_card"] = card
+        payload["public_ready_generated_at"] = datetime.now(timezone.utc).isoformat()
+        payload["public_ready_status"] = "needs_more_context" if needs_more_context else "public_ready"
+        funding.synthesized_json = payload
+        funding.synthesis_confidence = _float_or_none(card.get("confidence"))
+        funding.synthesis_generated_at = datetime.now(timezone.utc)
+        if needs_more_context:
+            funding.synthesis_status = "needs_review"
+            funding.synthesis_error = _needs_more_context_message(card)
+            funding.is_public = False
+            funding.is_reviewed = False
+            funding.reviewed_at = None
+        else:
+            _apply_public_ready_card(funding, card)
+            funding.synthesis_status = "synthesized"
+            funding.synthesis_error = None
+            funding.is_reviewed = True
+            funding.reviewed_at = funding.reviewed_at or datetime.now(timezone.utc)
+            funding.is_public = True
+            if funding.status == "draft":
+                funding.status = "active"
+    else:
+        funding.synthesis_status = "failed"
+        funding.synthesis_error = "; ".join(result.errors) if result.errors else "Funding public-ready generation failed."
     db.session.commit()
     return result
 
@@ -192,4 +289,92 @@ def _float_or_none(value) -> float | None:
             return None
         return float(value)
     except (TypeError, ValueError):
+        return None
+
+
+def _normalize_public_ready_card(data: dict[str, Any]) -> dict[str, Any]:
+    card = dict(data)
+    card["topic_tags"] = _dedupe_strings(_as_list(card.get("topic_tags") or card.get("tags")))
+    card["method_tags"] = _dedupe_strings(_as_list(card.get("method_tags")))
+    card["missing_information"] = _dedupe_strings(_as_list(card.get("missing_information")))
+    card["warnings"] = _dedupe_strings(_as_list(card.get("warnings")))
+    card["not_enough_information"] = bool(card.get("not_enough_information"))
+    return card
+
+
+def _apply_public_ready_card(funding: FundingOpportunity, card: dict[str, Any]) -> None:
+    summary = str(card.get("short_summary") or "").strip()
+    if summary:
+        funding.summary_public = summary
+    eligibility = str(card.get("eligibility_summary") or "").strip()
+    if eligibility:
+        funding.eligibility_summary = eligibility
+    amount_text = str(card.get("amount_text") or "").strip()
+    if amount_text:
+        funding.amount_text = amount_text
+    deadline_text = str(card.get("deadline_text") or "").strip()
+    if deadline_text:
+        funding.deadline_text = deadline_text
+    deadline_date = _date_or_none(card.get("deadline_date"))
+    if deadline_date is not None:
+        funding.deadline_date = deadline_date
+    if card.get("topic_tags"):
+        funding.topic_tags_json = card["topic_tags"]
+    if card.get("method_tags"):
+        funding.method_tags_json = card["method_tags"]
+    effort_label = str(card.get("effort_label") or "").strip().lower()
+    if effort_label in {"mild", "moderate", "heavy", "unknown"}:
+        apply_effort_classification(
+            funding,
+            EffortClassification(
+                effort_index=effort_label,
+                effort_score=score_for_effort(effort_label),
+                confidence=_float_or_none(card.get("confidence")),
+                rationale=str(card.get("effort_rationale") or "Effort came from OpenAI public-ready funding generation."),
+                signals=["openai public-ready funding generation"],
+            ),
+        )
+        funding.effort_reviewed_at = datetime.now(timezone.utc)
+
+
+def _card_needs_more_context(card: dict[str, Any]) -> bool:
+    if bool(card.get("not_enough_information")):
+        return True
+    useful_fields = [
+        card.get("short_summary"),
+        card.get("eligibility_summary"),
+        card.get("amount_text"),
+        card.get("deadline_text"),
+        card.get("deadline_date"),
+    ]
+    return not _has_text(card.get("short_summary")) or sum(1 for value in useful_fields if _has_text(value)) < 2
+
+
+def _needs_more_context_message(card: dict[str, Any]) -> str:
+    missing = card.get("missing_information") or []
+    if missing:
+        return "Needs more context: " + "; ".join(str(item) for item in missing[:4])
+    return "Needs more context before this funding card can be public."
+
+
+def _as_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if value in (None, ""):
+        return []
+    return [value]
+
+
+def _has_text(value: Any) -> bool:
+    return bool(str(value or "").strip())
+
+
+def _date_or_none(value: Any):
+    if value in (None, ""):
+        return None
+    if hasattr(value, "isoformat"):
+        return value
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except ValueError:
         return None

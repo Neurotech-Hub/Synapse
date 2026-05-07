@@ -46,6 +46,7 @@ def _funding_card_vars(title: str = "Pilot Award") -> dict:
             "short_summary": "",
             "effort_label": "mild|moderate|heavy|unknown",
             "confidence": 0.0,
+            "not_enough_information": False,
         },
     }
 
@@ -60,7 +61,8 @@ def test_execute_prompt_mock_success_creates_completed_run(app):
             source_id=1,
             mock_provider=lambda prompt, model: (
                 '{"schema_version":"1.0","display_title":"Pilot Award","short_summary":"A short summary.",'
-                '"effort_label":"mild","confidence":0.9,"best_for":[],"tags":[],"warnings":[]}'
+                '"effort_label":"mild","confidence":0.9,"not_enough_information":false,'
+                '"best_for":[],"tags":[],"missing_information":[],"warnings":[]}'
             ),
         )
 

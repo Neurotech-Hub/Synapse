@@ -11,6 +11,8 @@
 <form method="post" class="admin-form">
   {{ form.hidden_tag() }}
 
+  <section class="source-view-section">
+  <h2 class="source-view-h2">Basic details</h2>
   <div class="field-group">
     {{ form.title.label(class_="field-label") }}
     {{ form.title(class_="field-input field-input-prominent", size=72) }}
@@ -46,7 +48,11 @@
     {{ form.source_type(class_="field-input") }}
     {{ fm.field_errors(form.source_type) }}
   </div>
+  </section>
 
+  <section class="source-view-section">
+  <h2 class="source-view-h2">Review status</h2>
+  <div class="field-grid-2">
   <div class="field-group">
     <label class="field-label field-label-checkbox">{{ form.is_public() }} {{ form.is_public.label.text }}</label>
     <p class="field-hint muted">Public records may be shown by later public funding pages. Keep private notes out of public fields.</p>
@@ -55,8 +61,12 @@
   <div class="field-group">
     <label class="field-label field-label-checkbox">{{ form.is_reviewed() }} {{ form.is_reviewed.label.text }}</label>
   </div>
+  </div>
+  </section>
 
+  <section class="source-view-section">
   <h2 class="source-view-h2">Deadline and amount</h2>
+  <div class="field-grid-2">
   <div class="field-group">
     {{ form.deadline_date.label(class_="field-label") }}
     {{ form.deadline_date(class_="field-input") }}
@@ -87,8 +97,12 @@
     {{ form.mechanism(class_="field-input", size=72) }}
     {{ fm.field_errors(form.mechanism) }}
   </div>
+  </div>
+  </section>
 
+  <section class="source-view-section">
   <h2 class="source-view-h2">Effort and summaries</h2>
+  <div class="field-grid-2">
   <div class="field-group">
     {{ form.effort_index.label(class_="field-label") }}
     {{ form.effort_index(class_="field-input") }}
@@ -103,6 +117,7 @@
     {{ form.effort_rationale.label(class_="field-label") }}
     {{ form.effort_rationale(class_="field-input field-input-multiline", rows=3, cols=72) }}
     {{ fm.field_errors(form.effort_rationale) }}
+  </div>
   </div>
   <div class="field-group">
     {{ form.summary_public.label(class_="field-label") }}
@@ -124,7 +139,9 @@
     {{ form.notes_private(class_="field-input field-input-multiline", rows=3, cols=72) }}
     {{ fm.field_errors(form.notes_private) }}
   </div>
+  </section>
 
+  <section class="source-view-section">
   <h2 class="source-view-h2">Tags and raw notes</h2>
   <div class="field-group">
     {{ form.topic_tags.label(class_="field-label") }}
@@ -143,6 +160,7 @@
     {{ form.raw_text(class_="field-input field-input-multiline", rows=8, cols=72) }}
     {{ fm.field_errors(form.raw_text) }}
   </div>
+  </section>
 
   <div class="form-submit-row">
     <div class="form-submit-primary-actions">

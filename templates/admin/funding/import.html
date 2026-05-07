@@ -7,6 +7,7 @@
   <h1>Import funding CSV</h1>
   {% call syn_help.tips_bubble() %}{% include "admin/includes/help_funding_import.html" %}{% endcall %}
 </header>
+<p class="muted contextual-note">CSV import only creates or updates funding rows. OpenAI enrichment is manual from the Funding list or an individual funding detail page.</p>
 
 <form method="post" enctype="multipart/form-data" class="admin-form">
   {{ form.hidden_tag() }}
